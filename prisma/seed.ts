@@ -3,11 +3,8 @@ import { PrismaClient } from "@prisma/client";
 const prisma = new PrismaClient();
 
 async function main() {
-  const categories = ["Electronics", "Fashion", "Home"];
-
-  for (let name of categories) {
-    await prisma.category.create({ data: { name } });
-  }
+  const electronics = await prisma.category.create({ data: { name: "Electronics" } });
+  const fashion = await prisma.category.create({ data: { name: "Fashion" } });
 
   await prisma.product.createMany({
     data: [
@@ -17,7 +14,7 @@ async function main() {
         price: 59.99,
         stock: 25,
         image: "/assets/products/headphones.jpg",
-        category: "Electronics",
+        categoryId: electronics.id,
       },
       {
         name: "Running Shoes",
@@ -25,12 +22,10 @@ async function main() {
         price: 89.99,
         stock: 12,
         image: "/assets/products/shoes.jpg",
-        category: "Fashion",
-      }
+        categoryId: fashion.id,
+      },
     ],
   });
 }
 
-main()
-  .catch((e) => console.error(e))
-  .finally(async () => await prisma.$disconnect());
+main().catch(console.error).finally(() => prisma.$disconnect());
