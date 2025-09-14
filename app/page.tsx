@@ -1,28 +1,73 @@
-// app/page.tsx
+"use client";
+
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import { supabase } from "../app/lib/supabaseClient";
 import ProductCard from "./components/ProductCard";
-import { supabaseServer } from "../app/lib/supabaseServer";
-export default async function Home() {
-  // Fetch products from Supabase
-  const { data: products, error } = await supabaseServer
-    .from("products")
-    .select("*")
-    .order("name", { ascending: true });
 
-  if (error) {
-    console.error("Supabase error:", error);
-    return <div className="text-red-500 text-center mt-20">Error loading products: {error.message}</div>;
-  }
+export default function Home() {
+  const [products, setProducts] = useState<any[]>([]);
+  const [user, setUser] = useState<any>(null);
 
-  if (!products || products.length === 0) {
-    return <div className="text-gray-500 text-center mt-20">No products found</div>;
-  }
+  // ✅ Get current logged-in user
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => setUser(data.user));
+  }, []);
+
+  // ✅ Fetch products from Supabase
+  useEffect(() => {
+    const fetchProducts = async () => {
+      let { data, error } = await supabase.from("products").select("*");
+      if (error) {
+        console.error("Error fetching products:", error.message);
+      } else {
+        setProducts(data);
+      }
+    };
+    fetchProducts();
+  }, []);
+
+  // ✅ Handle adding product to cart
+  const handleAddToCart = async (productId: number) => {
+    if (!user) {
+      alert("Please log in first!");
+      return;
+    }
+
+    const { error } = await supabase.from("cart_items").insert([
+      { user_id: user.id, product_id: productId, quantity: 1 },
+    ]);
+
+    if (error) {
+      console.error("Error adding to cart:", error.message);
+      alert("Failed to add to cart.");
+    } else {
+      alert("Added to cart!");
+    }
+  };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 py-8">
-      <h1 className="text-3xl md:text-4xl font-bold mb-8 text-center">ShopMaster Products</h1>
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-        {products.map((product: any) => (
-          <ProductCard key={product.id} product={product} />
+    <div className="p-6">
+      <h1 className="text-2xl font-bold">🛒 Products</h1>
+
+      {!user && (
+        <p className="mt-2">
+          Please{" "}
+          <Link href="/auth" className="text-blue-500 underline">
+            log in
+          </Link>{" "}
+          to add items to cart.
+        </p>
+      )}
+
+      <div className="grid grid-cols-2 gap-4 mt-4">
+        {products.map((product) => (
+          <ProductCard
+            key={product.id}
+            product={product}
+            user={user}
+            addToCart={() => handleAddToCart(product.id)}
+          />
         ))}
       </div>
     </div>

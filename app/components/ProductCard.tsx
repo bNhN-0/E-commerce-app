@@ -1,37 +1,29 @@
 "use client";
 
-import { useState } from "react";
+interface ProductCardProps {
+  product: any;
+  user: any;
+  addToCart: () => void;
+}
 
-export default function ProductCard({ product }: { product: any }) {
-  const [adding, setAdding] = useState(false);
-
-  const addToCart = () => {
-    setAdding(true);
-    // Demo: just reset state after 0.5s
-    setTimeout(() => setAdding(false), 500);
-  };
-
+export default function ProductCard({ product, user, addToCart }: ProductCardProps) {
   return (
-    <div className="bg-white shadow rounded p-4 flex flex-col">
-      <div className="aspect-[4/3] bg-gray-100 mb-3 flex items-center justify-center">
-        <img
-          src={product.image || "/placeholder.png"}
-          alt={product.name}
-          className="object-cover w-full h-full rounded"
-        />
-      </div>
-      <h2 className="font-semibold text-lg">{product.name}</h2>
-      <p className="text-gray-600 text-sm flex-1">{product.description}</p>
-      <div className="mt-3 flex items-center justify-between">
-        <span className="font-bold">${parseFloat(product.price).toFixed(2)}</span>
+    <div className="border p-4 rounded-lg flex flex-col items-center">
+      <img
+        src={product.image_url}
+        alt={product.name}
+        className="w-full h-32 object-cover mb-2"
+      />
+      <h2 className="text-lg font-semibold">{product.name}</h2>
+      <p>${product.price}</p>
+      {user && (
         <button
           onClick={addToCart}
-          disabled={adding}
-          className="px-3 py-1 rounded bg-blue-600 text-white text-sm hover:bg-blue-700"
+          className="bg-blue-500 text-white px-3 py-1 rounded mt-2"
         >
-          {adding ? "Adding..." : "Add"}
+          Add to Cart
         </button>
-      </div>
+      )}
     </div>
   );
 }
