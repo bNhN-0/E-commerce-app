@@ -9,18 +9,11 @@ interface ProductCardProps {
 export default function ProductCard({ product, user, addToCart }: ProductCardProps) {
   return (
     <div className="border p-4 rounded-lg flex flex-col items-center">
-      <img
-        src={product.image_url}
-        alt={product.name}
-        className="w-full h-32 object-cover mb-2"
-      />
+      <img src={product.image_url} alt={product.name} className="w-full h-32 object-cover mb-2" />
       <h2 className="text-lg font-semibold">{product.name}</h2>
       <p>${product.price}</p>
       {user && (
-        <button
-          onClick={addToCart}
-          className="bg-blue-500 text-white px-3 py-1 rounded mt-2"
-        >
+        <button onClick={addToCart} className="bg-blue-500 text-white px-3 py-1 rounded mt-2">
           Add to Cart
         </button>
       )}

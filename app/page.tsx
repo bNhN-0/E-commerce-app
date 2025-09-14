@@ -1,49 +1,52 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
-import { supabase } from "../app/lib/supabaseClient";
+import { supabase } from "./lib/supabaseClient";
 import ProductCard from "./components/ProductCard";
+import Link from "next/link";
 
 export default function Home() {
   const [products, setProducts] = useState<any[]>([]);
   const [user, setUser] = useState<any>(null);
 
-  // ✅ Get current logged-in user
+  // Get logged-in user
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setUser(data.user));
   }, []);
 
-  // ✅ Fetch products from Supabase
+  // Fetch products
   useEffect(() => {
     const fetchProducts = async () => {
-      let { data, error } = await supabase.from("products").select("*");
-      if (error) {
-        console.error("Error fetching products:", error.message);
-      } else {
-        setProducts(data);
-      }
+      const { data, error } = await supabase.from("products").select("*");
+      if (error) console.error(error);
+      else setProducts(data);
     };
     fetchProducts();
   }, []);
 
-  // ✅ Handle adding product to cart
+  // Add product to cart
   const handleAddToCart = async (productId: number) => {
-    if (!user) {
-      alert("Please log in first!");
-      return;
+    if (!user) return alert("Please login first!");
+    // Ensure user has a cart
+    const { data: cart } = await supabase
+      .from("carts")
+      .select("*")
+      .eq("user_id", user.id)
+      .single();
+
+    let cartId = cart?.id;
+    if (!cartId) {
+      const { data: newCart } = await supabase
+        .from("carts")
+        .insert({ user_id: user.id })
+        .select()
+        .single();
+      cartId = newCart.id;
     }
 
-    const { error } = await supabase.from("cart_items").insert([
-      { user_id: user.id, product_id: productId, quantity: 1 },
-    ]);
-
-    if (error) {
-      console.error("Error adding to cart:", error.message);
-      alert("Failed to add to cart.");
-    } else {
-      alert("Added to cart!");
-    }
+    // Add item to cart
+    await supabase.from("cart_items").insert([{ cart_id: cartId, product_id: productId, quantity: 1 }]);
+    alert("Added to cart!");
   };
 
   return (
