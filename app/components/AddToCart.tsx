@@ -19,7 +19,8 @@ export default function Home() {
     const fetchProducts = async () => {
       let { data, error } = await supabase.from("products").select("*");
       if (error) console.error(error);
-      else setProducts(data);
+      else setProducts(data || []); // ← FIX applied here
+
     };
     fetchProducts();
   }, []);

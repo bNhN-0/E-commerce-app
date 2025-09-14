@@ -9,24 +9,27 @@ export default function Home() {
   const [products, setProducts] = useState<any[]>([]);
   const [user, setUser] = useState<any>(null);
 
-  // Get logged-in user
+  // ✅ Get logged-in user
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => setUser(data.user));
+    supabase.auth.getUser().then(({ data }) => {
+      setUser(data.user);
+    });
   }, []);
 
-  // Fetch products
+  // ✅ Fetch products
   useEffect(() => {
     const fetchProducts = async () => {
       const { data, error } = await supabase.from("products").select("*");
       if (error) console.error(error);
-      else setProducts(data);
+      else setProducts(data || []); // fallback if null
     };
     fetchProducts();
   }, []);
 
-  // Add product to cart
+  // ✅ Add product to cart
   const handleAddToCart = async (productId: number) => {
     if (!user) return alert("Please login first!");
+
     // Ensure user has a cart
     const { data: cart } = await supabase
       .from("carts")
@@ -41,12 +44,16 @@ export default function Home() {
         .insert({ user_id: user.id })
         .select()
         .single();
-      cartId = newCart.id;
+      cartId = newCart?.id;
     }
 
     // Add item to cart
-    await supabase.from("cart_items").insert([{ cart_id: cartId, product_id: productId, quantity: 1 }]);
-    alert("Added to cart!");
+    const { error } = await supabase
+      .from("cart_items")
+      .insert([{ cart_id: cartId, product_id: productId, quantity: 1 }]);
+
+    if (error) console.error(error);
+    else alert("Added to cart!");
   };
 
   return (
