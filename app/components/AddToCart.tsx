@@ -7,37 +7,70 @@ export default function Home() {
   const [products, setProducts] = useState<any[]>([]);
   const [user, setUser] = useState<any>(null);
 
-  // ✅ Fetch logged-in user
+  // Fetch logged-in user
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
       setUser(data.user);
     });
   }, []);
 
-  // ✅ Fetch products
+  // Fetch products
   useEffect(() => {
     const fetchProducts = async () => {
-      let { data, error } = await supabase.from("products").select("*");
+      const { data, error } = await supabase.from("products").select("*");
       if (error) console.error(error);
-      else setProducts(data || []); // ← FIX applied here
-
+      else setProducts(data || []);
     };
     fetchProducts();
   }, []);
 
-  // ✅ Add to cart
   const addToCart = async (productId: number) => {
     if (!user) {
       alert("Please log in first!");
       return;
     }
 
-    let { error } = await supabase.from("cart_items").insert([
-      { user_id: user.id, product_id: productId, quantity: 1 },
-    ]);
+    try {
+      // 1️⃣ Check if cart exists
+      const { data: existingCart, error: fetchError } = await supabase
+        .from("carts")
+        .select("*")
+        .eq("user_id", user.id)
+        .single();
 
-    if (error) console.error(error);
-    else alert("Added to cart!");
+      if (fetchError && fetchError.code !== "PGRST116") {
+        console.error("Error fetching cart:", fetchError);
+        return;
+      }
+
+      let cartId = existingCart?.id;
+
+      // 2️⃣ Create cart if missing
+      if (!cartId) {
+        const { data: newCart, error: createError } = await supabase
+          .from("carts")
+          .insert({ user_id: user.id })
+          .select()
+          .single();
+
+        if (createError) {
+          console.error("Error creating cart:", createError);
+          return;
+        }
+
+        cartId = newCart.id;
+      }
+
+      // 3️⃣ Add item to cart_items
+      const { error: insertError } = await supabase
+        .from("cart_items")
+        .insert([{ cart_id: cartId, product_id: productId, quantity: 1 }]);
+
+      if (insertError) console.error("Failed to add to cart:", insertError);
+      else alert("Added to cart!");
+    } catch (err) {
+      console.error("Unexpected error:", err);
+    }
   };
 
   return (

@@ -7,34 +7,60 @@ export default function CartPage() {
   const [cartItems, setCartItems] = useState<any[]>([]);
   const [user, setUser] = useState<any>(null);
 
+  // Fetch logged-in user
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setUser(data.user));
   }, []);
 
+  // Fetch cart items
   useEffect(() => {
     if (!user) return;
+
     const fetchCart = async () => {
-      const { data } = await supabase
+      const { data: cart } = await supabase
         .from("carts")
-        .select(`id, cart_items (*, product:product_id(*))`)
+        .select(`
+          id,
+          cart_items (
+            id,
+            quantity,
+            product:product_id (*)
+          )
+        `)
         .eq("user_id", user.id)
         .single();
-      setCartItems(data?.cart_items || []);
+
+      setCartItems(cart?.cart_items || []);
     };
+
     fetchCart();
   }, [user]);
+
+  const totalPrice = cartItems.reduce(
+    (sum, item) => sum + item.quantity * item.product.price,
+    0
+  );
 
   return (
     <div className="p-6">
       <h1 className="text-2xl font-bold">🛒 Your Cart</h1>
-      {cartItems.length === 0 ? <p>Cart is empty.</p> : (
-        <ul>
-          {cartItems.map((item) => (
-            <li key={item.id}>
-              {item.product.name} x {item.quantity} - ${item.product.price * item.quantity}
-            </li>
-          ))}
-        </ul>
+
+      {cartItems.length === 0 ? (
+        <p>Cart is empty.</p>
+      ) : (
+        <div>
+          <ul className="space-y-2">
+            {cartItems.map((item) => (
+              <li key={item.id} className="flex justify-between">
+                <span>
+                  {item.product.name} x {item.quantity}
+                </span>
+                <span>${item.product.price * item.quantity}</span>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-4 font-bold">Total: ${totalPrice}</p>
+        </div>
       )}
     </div>
   );

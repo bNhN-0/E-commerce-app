@@ -9,51 +9,77 @@ export default function Home() {
   const [products, setProducts] = useState<any[]>([]);
   const [user, setUser] = useState<any>(null);
 
-  // ✅ Get logged-in user
+  // Fetch logged-in user
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      setUser(data.user);
-    });
+    supabase.auth.getUser().then(({ data }) => setUser(data.user));
   }, []);
 
-  // ✅ Fetch products
+  // Fetch products
   useEffect(() => {
     const fetchProducts = async () => {
       const { data, error } = await supabase.from("products").select("*");
       if (error) console.error(error);
-      else setProducts(data || []); // fallback if null
+      else setProducts(data || []);
     };
     fetchProducts();
   }, []);
 
-  // ✅ Add product to cart
-  const handleAddToCart = async (productId: number) => {
-    if (!user) return alert("Please login first!");
+  // Add product to cart
+  const addToCart = async (productId: number) => {
+    if (!user) return alert("Please log in first!");
 
-    // Ensure user has a cart
-    const { data: cart } = await supabase
+    // 1️⃣ Ensure user exists in 'users' table
+    await supabase.from("users").upsert({
+      id: user.id,
+      name: user.email,
+      email: user.email,
+    });
+
+    // 2️⃣ Get or create user's cart
+    let { data: cart } = await supabase
       .from("carts")
       .select("*")
       .eq("user_id", user.id)
       .single();
 
-    let cartId = cart?.id;
-    if (!cartId) {
-      const { data: newCart } = await supabase
+    if (!cart) {
+      const { data: newCart, error: createCartError } = await supabase
         .from("carts")
         .insert({ user_id: user.id })
         .select()
         .single();
-      cartId = newCart?.id;
+
+      if (createCartError) {
+        console.error("Failed to create cart:", createCartError);
+        return;
+      }
+      cart = newCart;
     }
 
-    // Add item to cart
-    const { error } = await supabase
+    // 3️⃣ Add or update cart item
+    const { data: existingItem } = await supabase
       .from("cart_items")
-      .insert([{ cart_id: cartId, product_id: productId, quantity: 1 }]);
+      .select("*")
+      .eq("cart_id", cart.id)
+      .eq("product_id", productId)
+      .single();
 
-    if (error) console.error(error);
-    else alert("Added to cart!");
+    if (existingItem) {
+      await supabase
+        .from("cart_items")
+        .update({ quantity: existingItem.quantity + 1 })
+        .eq("id", existingItem.id);
+    } else {
+      await supabase.from("cart_items").insert([
+        {
+          cart_id: cart.id,
+          product_id: productId,
+          quantity: 1,
+        },
+      ]);
+    }
+
+    alert("Added to cart!");
   };
 
   return (
@@ -75,8 +101,7 @@ export default function Home() {
           <ProductCard
             key={product.id}
             product={product}
-            user={user}
-            addToCart={() => handleAddToCart(product.id)}
+            addToCart={() => addToCart(product.id)}
           />
         ))}
       </div>
