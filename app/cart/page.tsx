@@ -12,34 +12,25 @@ export default function CartPage() {
     supabase.auth.getUser().then(({ data }) => setUser(data.user));
   }, []);
 
-  // Fetch cart items
-  useEffect(() => {
-    if (!user) return;
+  const fetchCartItems = async () => {
+  if (!user) return;
 
-    const fetchCart = async () => {
-      const { data: cart } = await supabase
-        .from("carts")
-        .select(`
-          id,
-          cart_items (
-            id,
-            quantity,
-            product:product_id (*)
-          )
-        `)
-        .eq("user_id", user.id)
-        .single();
+  const { data: cart } = await supabase
+    .from("carts")
+    .select("*")
+    .eq("user_id", user.id)
+    .single();
 
-      setCartItems(cart?.cart_items || []);
-    };
+  if (!cart?.id) return;
 
-    fetchCart();
-  }, [user]);
+  const { data: items } = await supabase
+    .from("cart_items")
+    .select("id, quantity, product:product_id(*)")
+    .eq("cart_id", cart.id);
 
-  const totalPrice = cartItems.reduce(
-    (sum, item) => sum + item.quantity * item.product.price,
-    0
-  );
+  setCartItems(items || []);
+};
+
 
   return (
     <div className="p-6">

@@ -25,53 +25,45 @@ export default function Home() {
   }, []);
 
   const addToCart = async (productId: number) => {
-    if (!user) {
-      alert("Please log in first!");
+  if (!user) {
+    alert("Please log in first!");
+    return;
+  }
+
+  // 1️⃣ Get or create cart
+  let { data: cart, error: cartError } = await supabase
+    .from("carts")
+    .select("*")
+    .eq("user_id", user.id)
+    .single();
+
+  if (cartError || !cart) {
+    const { data: newCart, error: createCartError } = await supabase
+      .from("carts")
+      .insert({ user_id: user.id })
+      .select()
+      .single();
+
+    if (createCartError) {
+      console.error("Failed to create cart:", createCartError);
       return;
     }
+    cart = newCart;
+  }
 
-    try {
-      // 1️⃣ Check if cart exists
-      const { data: existingCart, error: fetchError } = await supabase
-        .from("carts")
-        .select("*")
-        .eq("user_id", user.id)
-        .single();
+  // 2️⃣ Insert item into cart
+  const { error: itemError } = await supabase
+    .from("cart_items")
+    .insert({ cart_id: cart.id, product_id: productId, quantity: 1 });
 
-      if (fetchError && fetchError.code !== "PGRST116") {
-        console.error("Error fetching cart:", fetchError);
-        return;
-      }
+  if (itemError) {
+    console.error("Failed to add item:", itemError);
+    return;
+  }
 
-      let cartId = existingCart?.id;
+  alert("Added to cart!");
+};
 
-      // 2️⃣ Create cart if missing
-      if (!cartId) {
-        const { data: newCart, error: createError } = await supabase
-          .from("carts")
-          .insert({ user_id: user.id })
-          .select()
-          .single();
-
-        if (createError) {
-          console.error("Error creating cart:", createError);
-          return;
-        }
-
-        cartId = newCart.id;
-      }
-
-      // 3️⃣ Add item to cart_items
-      const { error: insertError } = await supabase
-        .from("cart_items")
-        .insert([{ cart_id: cartId, product_id: productId, quantity: 1 }]);
-
-      if (insertError) console.error("Failed to add to cart:", insertError);
-      else alert("Added to cart!");
-    } catch (err) {
-      console.error("Unexpected error:", err);
-    }
-  };
 
   return (
     <div className="p-6">
