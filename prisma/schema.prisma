@@ -1,24 +1,129 @@
-generator client {
-  provider = "prisma-client-js"
+model User {
+  id        String    @id @default(uuid())
+  name      String
+  email     String    @unique
+  password  String
+  role      String    @default("customer")
+  addresses Address[]
+  carts     Cart[]
+  orders    Order[]
+  reviews   Review[]
+  createdAt DateTime  @default(now())
 }
 
-datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+model Address {
+  id         Int      @id @default(autoincrement())
+  user       User     @relation(fields: [userId], references: [id])
+  userId     String
+  fullName   String
+  street     String
+  city       String
+  state      String?
+  postalCode String
+  country    String
+  phone      String?
+  createdAt  DateTime @default(now())
 }
+
 model Category {
-  id   String @id @default(cuid())
-  name String @unique
-  products Product[]
+  id          Int       @id @default(autoincrement())
+  name        String    @unique
+  description String?
+  products    Product[]
 }
 
 model Product {
-  id          String   @id @default(cuid())
+  id          Int       @id @default(autoincrement())
   name        String
-  description String
+  description String?
   price       Float
-  stock       Int
-  image       String
-  category    Category @relation(fields: [categoryId], references: [id])
-  categoryId  String
+  stock       Int       @default(0)
+  category    Category? @relation(fields: [categoryId], references: [id])
+  categoryId  Int?
+  imageUrl    String?
+  reviews     Review[]
+  cartItems   CartItem[]
+  orderItems  OrderItem[]
+  createdAt   DateTime  @default(now())
+}
+
+model Cart {
+  id        Int        @id @default(autoincrement())
+  user      User       @relation(fields: [userId], references: [id])
+  userId    String
+  items     CartItem[]
+  createdAt DateTime   @default(now())
+}
+
+model CartItem {
+  id        Int      @id @default(autoincrement())
+  cart      Cart     @relation(fields: [cartId], references: [id])
+  cartId    Int
+  product   Product  @relation(fields: [productId], references: [id])
+  productId Int
+  quantity  Int
+  createdAt DateTime @default(now())
+}
+
+model Order {
+  id        Int         @id @default(autoincrement())
+  user      User        @relation(fields: [userId], references: [id])
+  userId    String
+  address   Address?    @relation(fields: [addressId], references: [id])
+  addressId Int?
+  total     Float       @default(0)
+  status    String      @default("pending")
+  items     OrderItem[]
+  coupons   OrderCoupon[]
+  payments  Payment[]
+  createdAt DateTime    @default(now())
+}
+
+model OrderItem {
+  id        Int     @id @default(autoincrement())
+  order     Order   @relation(fields: [orderId], references: [id])
+  orderId   Int
+  product   Product @relation(fields: [productId], references: [id])
+  productId Int
+  quantity  Int
+  price     Float
+}
+
+model Payment {
+  id            Int     @id @default(autoincrement())
+  order         Order   @relation(fields: [orderId], references: [id])
+  orderId       Int
+  amount        Float
+  method        String
+  status        String  @default("pending")
+  transactionId String?
+  createdAt     DateTime @default(now())
+}
+
+model Review {
+  id        Int      @id @default(autoincrement())
+  product   Product  @relation(fields: [productId], references: [id])
+  productId Int
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String
+  rating    Int
+  comment   String?
+  createdAt DateTime @default(now())
+}
+
+model Coupon {
+  id            Int           @id @default(autoincrement())
+  code          String        @unique
+  discountPercent Int
+  validUntil    DateTime?
+  createdAt     DateTime      @default(now())
+  orderCoupons  OrderCoupon[]
+}
+
+model OrderCoupon {
+  id       Int    @id @default(autoincrement())
+  order    Order  @relation(fields: [orderId], references: [id])
+  orderId  Int
+  coupon   Coupon @relation(fields: [couponId], references: [id])
+  couponId Int
 }
