@@ -70,7 +70,7 @@ export default function Home() {
       {!user && (
         <p className="mt-2">
           Please{" "}
-          <Link href="/auth" className="text-blue-500 underline">
+          <Link href="localhost:3000/auth" className="text-blue-500 underline">
             log in
           </Link>{" "}
           to add items to cart.
