@@ -1,73 +1,31 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import ProductCard from "./components/ProductCard";
 import Link from "next/link";
 
-type Product = {
-  id: number;
-  name: string;
-  description?: string;
-  price: number;
-  stock: number;
-  imageUrl?: string;
-};
-
-export default function Home() {
-  const [products, setProducts] = useState<Product[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const fetchProducts = async () => {
-      try {
-        const res = await fetch("/api/products");
-        const data = await res.json();
-        setProducts(data);
-      } catch (err) {
-        console.error("Failed to fetch products:", err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchProducts();
-  }, []);
-
-  const handleAddToCart = async (productId: number) => {
-    // Replace this with actual user ID from auth (Supabase or your own session)
-    const userId = "USER_ID_HERE";
-
-    if (!userId) return alert("Please log in first!");
-
-    try {
-      const res = await fetch("/api/cart/add", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId, productId, quantity: 1 }),
-      });
-      const data = await res.json();
-      alert(data.message || data.error);
-    } catch (err) {
-      console.error("Failed to add to cart:", err);
-    }
-  };
-
-  if (loading) return <div className="p-6">Loading products...</div>;
-
+export default function HomePage() {
   return (
-    <div className="p-6">
-      <h1 className="text-2xl font-bold">🛒 Products</h1>
+    <main className="p-6">
+      <h1 className="text-3xl font-bold mb-4">🏪 Welcome to My E-Commerce Store</h1>
+      <p className="mb-6 text-gray-600">
+        Browse products, add them to your cart, and place orders. 
+        Admins can manage products from the dashboard.
+      </p>
 
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 mt-4">
-        {products.map((product) => (
-          <ProductCard
-            key={product.id}
-            product={product}
-            addToCart={() => handleAddToCart(product.id)}
-          />
-        ))}
+      <div className="flex gap-4">
+        <Link
+          href="/products"
+          className="bg-blue-500 text-white px-4 py-2 rounded"
+        >
+          View Products
+        </Link>
+
+        <Link
+          href="/admin/products"
+          className="bg-green-600 text-white px-4 py-2 rounded"
+        >
+          Admin Dashboard
+        </Link>
       </div>
-
-      {!products.length && !loading && <p>No products found.</p>}
-    </div>
+    </main>
   );
 }

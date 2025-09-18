@@ -7,7 +7,6 @@ export default function CartPage() {
   const [cartItems, setCartItems] = useState<any[]>([]);
   const [user, setUser] = useState<any>(null);
 
-  // Fetch logged-in user
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setUser(data.user));
   }, []);
