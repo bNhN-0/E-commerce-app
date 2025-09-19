@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { supabase } from "../../lib/supabaseClient"; // only for auth
+import { supabase } from "@/lib/supabaseClient"; // only for auth
 import { useRouter } from "next/navigation";
 
 export default function AuthPage() {
