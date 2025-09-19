@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
-const USER_ID = "demo-user"; // hardcoded for now
+const USER_ID = "demo-user";
 
 export async function GET() {
   try {
@@ -14,7 +14,7 @@ export async function GET() {
       },
     });
 
-    // Always return at least an empty cart
+    //  Always return a JSON object, even if cart is empty
     return NextResponse.json(cart || { id: null, items: [] });
   } catch (error) {
     console.error("Cart API error:", error);

@@ -27,14 +27,14 @@ export default function AddProductPage() {
     });
 
     alert("Product created!");
-    router.push("/admin/products"); // ✅ redirect back to product list
+    router.push("/admin/products"); //  redirect back to product list
   };
 
   return (
     <div className="p-6">
       <div className="flex justify-between items-center mb-4">
         <h1 className="text-2xl font-bold">Add New Product</h1>
-        {/* ✅ Back button outside form header */}
+        {/*  Back button outside form header */}
         <button
           type="button"
           onClick={() => router.push("/admin/products")}

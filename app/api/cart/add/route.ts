@@ -7,11 +7,26 @@ export async function POST(req: Request) {
   try {
     const { productId, quantity } = await req.json();
 
+    //  Ensure demo user exists
+    let user = await prisma.user.findUnique({ where: { id: USER_ID } });
+    if (!user) {
+      user = await prisma.user.create({
+        data: {
+          id: USER_ID,
+          name: "Demo User",
+          email: "demo@example.com",
+          password: "123456", // just for testing
+        },
+      });
+    }
+
+    //  Ensure cart exists
     let cart = await prisma.cart.findFirst({ where: { userId: USER_ID } });
     if (!cart) {
       cart = await prisma.cart.create({ data: { userId: USER_ID } });
     }
 
+    //  Check if product is already in cart
     const existingItem = await prisma.cartItem.findFirst({
       where: { cartId: cart.id, productId },
     });

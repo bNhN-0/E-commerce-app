@@ -13,7 +13,7 @@ type Product = {
 };
 
 export default function ProductDetailPage() {
-  const params = useParams(); // ✅ get { id } from the URL
+  const params = useParams(); //  get { id } from the URL
   const [product, setProduct] = useState<Product | null>(null);
   const [loading, setLoading] = useState(true);
 
