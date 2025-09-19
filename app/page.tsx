@@ -5,7 +5,7 @@ import Link from "next/link";
 export default function HomePage() {
   return (
     <main className="p-6">
-      <h1 className="text-3xl font-bold mb-4">🏪 Welcome to My E-Commerce Store</h1>
+      <h1 className="text-3xl font-bold mb-4">🏪 Welcome to Shoply Store</h1>
       <p className="mb-6 text-gray-600">
         Browse products, add them to your cart, and place orders. 
         Admins can manage products from the dashboard.

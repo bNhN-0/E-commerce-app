@@ -34,6 +34,7 @@ export default function AdminProductsPage() {
     if (!confirm("Are you sure you want to delete this product?")) return;
     await fetch(`/api/products/${id}`, { method: "DELETE" });
     setProducts(products.filter((p) => p.id !== id)); // update UI
+
   };
 
   if (loading) return <p className="p-4">Loading products...</p>;
