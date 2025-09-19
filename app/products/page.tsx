@@ -12,6 +12,7 @@ type Product = {
 };
 
 export default function ProductsPage() {
+
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -28,9 +29,22 @@ export default function ProductsPage() {
       }
     };
 
+                {/*  
+Component mounts → loading = true.
+
+Fetch starts.
+
+If success → products set, then loading = false.
+
+If error → error logged, then loading = false.
+
+UI updates → either shows products or shows nothing (but not “Loading…” anymore)
+ */}
+
+
+  
     fetchProducts();
   }, []);
-
   if (loading) return <p className="p-4">Loading products...</p>;
 
   return (
@@ -39,7 +53,7 @@ export default function ProductsPage() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {products.map((p) => (
           <div key={p.id} className="border rounded p-4 shadow">
-            {/* ✅ Show product image if available */}
+            {/* Show product image if available */}
             {p.imageUrl ? (
               <img
                 src={p.imageUrl}

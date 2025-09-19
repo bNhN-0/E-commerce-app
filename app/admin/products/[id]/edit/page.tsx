@@ -1,0 +1,116 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+
+type Product = {
+  id: number;
+  name: string;
+  description?: string;
+  price: number;
+  stock: number;
+  imageUrl?: string;
+};
+
+export default function EditProductPage({ params }: { params: Promise<{ id: string }> }) {
+  const [product, setProduct] = useState<Product | null>(null);
+  const [loading, setLoading] = useState(true);
+  const router = useRouter();
+
+  // unwrap params first
+  const [id, setId] = useState<string | null>(null);
+
+  useEffect(() => {
+    params.then((p) => setId(p.id));
+  }, [params]);
+
+  useEffect(() => {
+    if (!id) return; // wait until id is set
+
+    const fetchProduct = async () => {
+      try {
+        const res = await fetch(`/api/products/${id}`);
+        const data = await res.json();
+        setProduct(data);
+      } catch (err) {
+        console.error("Failed to fetch product:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchProduct();
+  }, [id]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!product || !id) return;
+
+    await fetch(`/api/products/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(product),
+    });
+
+    alert("Product updated!");
+    router.push("/admin/products");
+  };
+
+  if (loading) return <p className="p-4">Loading product...</p>;
+  if (!product) return <p className="p-4 text-red-500">Product not found.</p>;
+
+  return (
+    <div className="p-6">
+      <h1 className="text-2xl font-bold mb-4">Edit Product</h1>
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <input
+          value={product.name}
+          onChange={(e) => setProduct({ ...product, name: e.target.value })}
+          placeholder="Product name"
+          className="border p-2 w-full"
+        />
+        <textarea
+          value={product.description || ""}
+          onChange={(e) =>
+            setProduct({ ...product, description: e.target.value })
+          }
+          placeholder="Description"
+          className="border p-2 w-full"
+        />
+        <input
+          type="number"
+          value={product.price}
+          onChange={(e) =>
+            setProduct({ ...product, price: parseFloat(e.target.value) })
+          }
+          placeholder="Price"
+          className="border p-2 w-full"
+        />
+        <input
+          type="number"
+          value={product.stock}
+          onChange={(e) =>
+            setProduct({ ...product, stock: parseInt(e.target.value) })
+          }
+          placeholder="Stock"
+          className="border p-2 w-full"
+        />
+        <input
+          value={product.imageUrl || ""}
+          onChange={(e) =>
+            setProduct({ ...product, imageUrl: e.target.value })
+          }
+          placeholder="Image URL"
+          className="border p-2 w-full"
+        />
+
+        <button
+          type="submit"
+          className="bg-blue-600 text-white px-4 py-2 rounded"
+        >
+          Save Changes
+        </button>
+      </form>
+    </div>
+  );
+}
