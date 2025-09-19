@@ -39,6 +39,19 @@ export default function ProductsPage() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {products.map((p) => (
           <div key={p.id} className="border rounded p-4 shadow">
+            {/* ✅ Show product image if available */}
+            {p.imageUrl ? (
+              <img
+                src={p.imageUrl}
+                alt={p.name}
+                className="w-full h-40 object-cover mb-2 rounded"
+              />
+            ) : (
+              <div className="w-full h-40 bg-gray-200 flex items-center justify-center mb-2 rounded">
+                <span className="text-gray-500">No Image</span>
+              </div>
+            )}
+
             <h2 className="font-semibold">{p.name}</h2>
             <p className="text-gray-600">{p.description}</p>
             <p className="font-bold">${p.price}</p>
