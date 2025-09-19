@@ -32,7 +32,18 @@ export default function AddProductPage() {
 
   return (
     <div className="p-6">
-      <h1 className="text-2xl font-bold mb-4">Add New Product</h1>
+      <div className="flex justify-between items-center mb-4">
+        <h1 className="text-2xl font-bold">Add New Product</h1>
+        {/* ✅ Back button outside form header */}
+        <button
+          type="button"
+          onClick={() => router.push("/admin/products")}
+          className="bg-gray-600 text-white px-4 py-2 rounded"
+        >
+          ← Back
+        </button>
+      </div>
+
       <form onSubmit={handleSubmit} className="space-y-4">
         <input
           value={name}

@@ -61,7 +61,17 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
 
   return (
     <div className="p-6">
-      <h1 className="text-2xl font-bold mb-4">Edit Product</h1>
+      <div className="flex justify-between items-center mb-4">
+        <h1 className="text-2xl font-bold">Edit Product</h1>
+        {/* ✅ Back button */}
+        <button
+          onClick={() => router.push("/admin/products")}
+          className="bg-gray-600 text-white px-4 py-2 rounded"
+        >
+          ← Back
+        </button>
+      </div>
+
       <form onSubmit={handleSubmit} className="space-y-4">
         <input
           value={product.name}
