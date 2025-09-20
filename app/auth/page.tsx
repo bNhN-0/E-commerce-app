@@ -1,102 +1,86 @@
 "use client";
 
 import { useState } from "react";
-import { supabase } from "@/lib/supabaseClient"; // only for auth
+import { supabase } from "@/lib/supabaseClient";
 import { useRouter } from "next/navigation";
 
 export default function AuthPage() {
+  const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState("");
-  const [name, setName] = useState(""); 
   const [password, setPassword] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [name, setName] = useState("");
   const router = useRouter();
 
-  const handleSignup = async () => {
-    setLoading(true);
+  const handleAuth = async (e: React.FormEvent) => {
+    e.preventDefault();
 
+    if (isLogin) {
+      // 🔹 Login
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) return alert(error.message);
 
-    const { data: supabaseUser, error: supabaseError } = await supabase.auth.signUp({
-      email,
-      password,
-    });
-
-    if (supabaseError) {
-      alert(supabaseError.message);
-      setLoading(false);
-      return;
-    }
-
-    // 2️⃣ Create user in Prisma DB
-    const res = await fetch("localhost:3000/api/users", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email, name }),
-    });
-
-    if (!res.ok) {
-      alert("Failed to create user in database");
+      alert("Logged in!");
+      router.push("/");
     } else {
-      alert("Signup successful! Check your email for confirmation.");
-      router.push("/");
+      // 🔹 Signup
+      const { data, error } = await supabase.auth.signUp({ email, password });
+      if (error) return alert(error.message);
+
+      // Create user in Prisma DB (role = customer)
+      await fetch("/user", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: data.user?.id, email, name }),
+      });
+
+      alert("Signed up! Check your email.");
+      setIsLogin(true); // go back to login form
     }
-
-    setLoading(false);
-  };
-
-  const handleLogin = async () => {
-    setLoading(true);
-
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-
-    if (error) alert(error.message);
-    else {
-      alert("Logged in successfully!");
-      router.push("/");
-    }
-
-    setLoading(false);
   };
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen p-6">
-      <h1 className="text-2xl font-bold mb-4">🔑 Login / Signup</h1>
-      <input
-        type="text"
-        placeholder="Name"
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        className="border p-2 mb-2 w-64"
-      />
-      <input
-        type="email"
-        placeholder="Email"
-        value={email}
-        onChange={(e) => setEmail(e.target.value)}
-        className="border p-2 mb-2 w-64"
-      />
-      <input
-        type="password"
-        placeholder="Password"
-        value={password}
-        onChange={(e) => setPassword(e.target.value)}
-        className="border p-2 mb-2 w-64"
-      />
-      <div className="flex gap-2">
-        <button
-          onClick={handleSignup}
-          disabled={loading}
-          className="bg-green-500 text-white px-4 py-2 rounded"
-        >
-          Sign Up
+    <div className="p-6 max-w-md mx-auto">
+      <h1 className="text-2xl font-bold mb-4">
+        {isLogin ? "Login" : "Sign Up"}
+      </h1>
+
+      <form onSubmit={handleAuth} className="space-y-3">
+        {!isLogin && (
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Name"
+            className="border p-2 w-full"
+          />
+        )}
+        <input
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="Email"
+          className="border p-2 w-full"
+        />
+        <input
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          placeholder="Password"
+          className="border p-2 w-full"
+        />
+        <button className="bg-blue-600 text-white px-4 py-2 rounded w-full">
+          {isLogin ? "Login" : "Sign Up"}
         </button>
+      </form>
+
+      <p className="mt-4 text-sm text-gray-600">
+        {isLogin ? "Don't have an account?" : "Already registered?"}{" "}
         <button
-          onClick={handleLogin}
-          disabled={loading}
-          className="bg-blue-500 text-white px-4 py-2 rounded"
+          onClick={() => setIsLogin(!isLogin)}
+          className="text-blue-500 underline"
         >
-          Log In
+          {isLogin ? "Sign Up" : "Login"}
         </button>
-      </div>
+      </p>
     </div>
   );
 }

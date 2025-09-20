@@ -31,7 +31,7 @@ export default function Navbar() {
         <Link href="/">Home</Link>
         <Link href="/cart">Cart</Link>
         {!user ? (
-          <Link href="/auth">Login / Signup</Link>
+          <Link href="/auth/">Login / Signup</Link>
         ) : (
           <button onClick={handleLogout} className="bg-red-500 px-2 py-1 rounded">
             Logout

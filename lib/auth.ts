@@ -3,11 +3,12 @@ import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 
 /**
- * Get the logged-in user from Supabase and match it with your Prisma User table
+ * Get the logged-in user from Supabase and match it with your Prisma User table.
  */
 export async function getUserSession() {
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
 
+  //  Create a Supabase client using Next.js cookies
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -20,25 +21,25 @@ export async function getUserSession() {
           try {
             cookieStore.set({ name, value, ...options });
           } catch {
-            // ignore if headers already sent
+            // Ignore if headers already sent
           }
         },
         remove(name: string, options: any) {
           try {
             cookieStore.set({ name, value: "", ...options });
           } catch {
-            // ignore if headers already sent
+            // Ignore if headers already sent
           }
         },
       },
     }
   );
 
-  // 🔑 Step 1: get Supabase user
+  // 🔹 Step 1: Get Supabase user
   const { data, error } = await supabase.auth.getUser();
   if (error || !data.user) return null;
 
-  // 🔑 Step 2: look up Prisma User (to get role, etc.)
+  // 🔹 Step 2: Match with Prisma User (so we know role, etc.)
   const dbUser = await prisma.user.findUnique({
     where: { id: data.user.id },
   });
