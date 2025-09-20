@@ -15,34 +15,44 @@ export default function AuthPage() {
     e.preventDefault();
 
     if (isLogin) {
-      // 🔹 Login
+      // 🔹 LOGIN
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) return alert(error.message);
 
       alert("Logged in!");
       router.push("/");
     } else {
-      // 🔹 Signup
+      // 🔹 SIGNUP
       const { data, error } = await supabase.auth.signUp({ email, password });
       if (error) return alert(error.message);
 
-      // Create user in Prisma DB (role = customer)
-      await fetch("/user", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: data.user?.id, email, name }),
-      });
+      // ✅ sync into Prisma User table
+      if (data.user) {
+        const res = await fetch("/user", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            id: data.user.id,
+            email,
+            name,
+          }),
+        });
 
-      alert("Signed up! Check your email.");
-      setIsLogin(true); // go back to login form
+        if (!res.ok) {
+          console.error("Failed to create user in Prisma", await res.json());
+        } else {
+          console.log("User synced with Prisma ✅");
+        }
+      }
+
+      alert("Signed up! Please log in.");
+      setIsLogin(true); // switch to login form
     }
   };
 
   return (
     <div className="p-6 max-w-md mx-auto">
-      <h1 className="text-2xl font-bold mb-4">
-        {isLogin ? "Login" : "Sign Up"}
-      </h1>
+      <h1 className="text-2xl font-bold mb-4">{isLogin ? "Login" : "Sign Up"}</h1>
 
       <form onSubmit={handleAuth} className="space-y-3">
         {!isLogin && (
