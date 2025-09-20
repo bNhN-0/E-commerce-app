@@ -9,6 +9,7 @@
     "lint": "eslint"
   },
   "prisma": {
+    "schema": "prisma/schema.prisma",
     "seed": "ts-node --esm prisma/seed.ts"
   },
   "dependencies": {
