@@ -31,11 +31,18 @@ export default function AdminProductsPage() {
   }, []);
 
   const handleDelete = async (id: number) => {
-    if (!confirm("Are you sure you want to delete this product?")) return;
-    await fetch(`/api/products/${id}`, { method: "DELETE" });
-    setProducts(products.filter((p) => p.id !== id)); // update UI
+  if (!confirm("Are you sure you want to delete this product?")) return;
 
-  };
+  const res = await fetch(`/api/products/${id}`, { method: "DELETE" });
+
+  if (res.ok) {
+    setProducts(products.filter((p) => p.id !== id)); // update UI
+    alert(" Product deleted");
+  } else {
+    const error = await res.json();
+    alert(` ${error.error || "Failed to delete product"}`);
+  }
+};
 
   if (loading) return <p className="p-4">Loading products...</p>;
 

@@ -14,7 +14,7 @@ export default function AddProductPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    await fetch("/api/products", {
+    const res = await fetch("/api/products", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -26,15 +26,21 @@ export default function AddProductPage() {
       }),
     });
 
-    alert("Product created!");
-    router.push("/admin/products"); //  redirect back to product list
+    if (res.ok) {
+      alert(" Product created!");
+      router.push("/admin/products"); // go back to product list
+      router.refresh(); // 🔑 ensure list reloads with fresh data
+    } else {
+      alert(" Failed to create product");
+    }
   };
 
   return (
     <div className="p-6">
       <div className="flex justify-between items-center mb-4">
         <h1 className="text-2xl font-bold">Add New Product</h1>
-        {/*  Back button outside form header */}
+
+        {/* Back button */}
         <button
           type="button"
           onClick={() => router.push("/admin/products")}
@@ -50,6 +56,7 @@ export default function AddProductPage() {
           onChange={(e) => setName(e.target.value)}
           placeholder="Product name"
           className="border p-2 w-full"
+          required
         />
         <textarea
           value={description}
@@ -63,6 +70,7 @@ export default function AddProductPage() {
           onChange={(e) => setPrice(e.target.value)}
           placeholder="Price"
           className="border p-2 w-full"
+          required
         />
         <input
           type="number"
@@ -70,6 +78,7 @@ export default function AddProductPage() {
           onChange={(e) => setStock(e.target.value)}
           placeholder="Stock"
           className="border p-2 w-full"
+          required
         />
         <input
           value={imageUrl}

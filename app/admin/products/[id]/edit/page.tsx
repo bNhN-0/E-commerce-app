@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { use, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 type Product = {
@@ -13,20 +13,12 @@ type Product = {
 };
 
 export default function EditProductPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params); //  unwrap the promise
   const [product, setProduct] = useState<Product | null>(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 
-  // unwrap params first
-  const [id, setId] = useState<string | null>(null);
-
   useEffect(() => {
-    params.then((p) => setId(p.id));
-  }, [params]);
-
-  useEffect(() => {
-    if (!id) return; // wait until id is set
-
     const fetchProduct = async () => {
       try {
         const res = await fetch(`/api/products/${id}`);
@@ -44,16 +36,21 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!product || !id) return;
+    if (!product) return;
 
-    await fetch(`/api/products/${id}`, {
+    const res = await fetch(`/api/products/${id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(product),
     });
 
-    alert("Product updated!");
-    router.push("/admin/products");
+    if (res.ok) {
+      alert(" Product updated!");
+      router.push("/admin/products");
+      router.refresh();
+    } else {
+      alert(" Failed to update product");
+    }
   };
 
   if (loading) return <p className="p-4">Loading product...</p>;
@@ -63,8 +60,8 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
     <div className="p-6">
       <div className="flex justify-between items-center mb-4">
         <h1 className="text-2xl font-bold">Edit Product</h1>
-        {/*  Back button */}
         <button
+          type="button"
           onClick={() => router.push("/admin/products")}
           className="bg-gray-600 text-white px-4 py-2 rounded"
         >
@@ -78,6 +75,7 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
           onChange={(e) => setProduct({ ...product, name: e.target.value })}
           placeholder="Product name"
           className="border p-2 w-full"
+          required
         />
         <textarea
           value={product.description || ""}
@@ -95,6 +93,7 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
           }
           placeholder="Price"
           className="border p-2 w-full"
+          required
         />
         <input
           type="number"
@@ -104,6 +103,7 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
           }
           placeholder="Stock"
           className="border p-2 w-full"
+          required
         />
         <input
           value={product.imageUrl || ""}
