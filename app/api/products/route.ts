@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getUserSession } from "@/lib/auth";
 
-// GET all products
+// GET all products (public)
 export async function GET() {
   try {
     const products = await prisma.product.findMany();
@@ -11,9 +12,13 @@ export async function GET() {
   }
 }
 
-// POST create product
+// POST create product (admin only)
 export async function POST(req: Request) {
   try {
+    const user = await getUserSession();
+    if (!user) return NextResponse.json({ error: "Not logged in" }, { status: 401 });
+    if (user.role !== "admin") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
     const body = await req.json();
     const { name, description, price, stock, imageUrl } = body;
 

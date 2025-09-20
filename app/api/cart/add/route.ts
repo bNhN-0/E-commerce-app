@@ -1,32 +1,21 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-
-const USER_ID = "demo-user";
+import { getUserSession } from "@/lib/auth";
 
 export async function POST(req: Request) {
   try {
+    const user = await getUserSession();
+    if (!user) return NextResponse.json({ error: "Not logged in" }, { status: 401 });
+
     const { productId, quantity } = await req.json();
 
-    //  Ensure demo user exists
-    let user = await prisma.user.findUnique({ where: { id: USER_ID } });
-    if (!user) {
-      user = await prisma.user.create({
-        data: {
-          id: USER_ID,
-          name: "Demo User",
-          email: "demo@example.com",
-          password: "123456", // just for testing
-        },
-      });
-    }
-
-    //  Ensure cart exists
-    let cart = await prisma.cart.findFirst({ where: { userId: USER_ID } });
+    // Ensure cart exists
+    let cart = await prisma.cart.findFirst({ where: { userId: user.id } });
     if (!cart) {
-      cart = await prisma.cart.create({ data: { userId: USER_ID } });
+      cart = await prisma.cart.create({ data: { userId: user.id } });
     }
 
-    //  Check if product is already in cart
+    // Check if product is already in cart
     const existingItem = await prisma.cartItem.findFirst({
       where: { cartId: cart.id, productId },
     });

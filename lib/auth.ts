@@ -35,11 +35,11 @@ export async function getUserSession() {
     }
   );
 
-  // 🔹 Step 1: Get Supabase user
+  //  Step 1: Get Supabase user
   const { data, error } = await supabase.auth.getUser();
   if (error || !data.user) return null;
 
-  // 🔹 Step 2: Match with Prisma User (so we know role, etc.)
+  //  Step 2: Match with Prisma User (so we know role, etc.)
   const dbUser = await prisma.user.findUnique({
     where: { id: data.user.id },
   });

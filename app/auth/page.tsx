@@ -15,18 +15,18 @@ export default function AuthPage() {
     e.preventDefault();
 
     if (isLogin) {
-      // 🔹 LOGIN
+      //  LOGIN
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) return alert(error.message);
 
       alert("Logged in!");
       router.push("/");
     } else {
-      // 🔹 SIGNUP
+      //  SIGNUP
       const { data, error } = await supabase.auth.signUp({ email, password });
       if (error) return alert(error.message);
 
-      // ✅ sync into Prisma User table
+      //  sync into Prisma User table
       if (data.user) {
         const res = await fetch("/user", {
           method: "POST",
@@ -41,7 +41,7 @@ export default function AuthPage() {
         if (!res.ok) {
           console.error("Failed to create user in Prisma", await res.json());
         } else {
-          console.log("User synced with Prisma ✅");
+          console.log("User synced with Prisma ");
         }
       }
 

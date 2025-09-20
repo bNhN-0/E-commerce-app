@@ -40,7 +40,9 @@ export default function AdminProductsPage() {
   if (loading) return <p className="p-4">Loading products...</p>;
 
   return (
+    
     <div className="p-6">
+       
       <div className="flex justify-between items-center mb-4">
         <h1 className="text-2xl font-bold">Admin: Products</h1>
         <div className="flex gap-2">
