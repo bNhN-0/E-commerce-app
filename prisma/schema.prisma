@@ -8,15 +8,23 @@ generator client {
 }
 
 model User {
-  id        String    @id @default(uuid())
+  id        String          @id @default(uuid()) // from Supabase auth
   name      String
-  email     String    @unique
-  role      String    @default("customer")
+  email     String          @unique
+  phone     String?         // optional for profile
+  avatarUrl String?         // profile picture
+  role      Role            @default(CUSTOMER)
   addresses Address[]
+  paymentMethods PaymentMethod[]
   carts     Cart[]
   orders    Order[]
   reviews   Review[]
-  createdAt DateTime  @default(now())
+  createdAt DateTime        @default(now())
+}
+
+enum Role {
+  CUSTOMER
+  ADMIN
 }
 
 model Address {
@@ -32,7 +40,19 @@ model Address {
   phone      String?
   createdAt  DateTime @default(now())
 
-  orders Order[] @relation("AddressOrders") // added relation to Order
+  orders Order[] @relation("AddressOrders")
+}
+
+model PaymentMethod {
+  id        Int      @id @default(autoincrement())
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String
+  type      String   // "card", "bank", "paypal", etc.
+  provider  String?  // e.g. "Visa", "MasterCard", "BDO Bank"
+  last4     String?  // last 4 digits of card for display
+  createdAt DateTime @default(now())
+
+  payments  Payment[]
 }
 
 model Category {
@@ -43,18 +63,18 @@ model Category {
 }
 
 model Product {
-  id          Int         @id @default(autoincrement())
+  id          Int           @id @default(autoincrement())
   name        String
   description String?
   price       Float
-  stock       Int         @default(0)
-  category    Category?   @relation(fields: [categoryId], references: [id])
+  stock       Int           @default(0)
+  category    Category?     @relation(fields: [categoryId], references: [id])
   categoryId  Int?
   imageUrl    String?
   reviews     Review[]
   cartItems   CartItem[]
   orderItems  OrderItem[]
-  createdAt   DateTime    @default(now())
+  createdAt   DateTime      @default(now())
 }
 
 model Cart {
@@ -82,11 +102,19 @@ model Order {
   address   Address?      @relation(fields: [addressId], references: [id], name: "AddressOrders")
   addressId Int?
   total     Float         @default(0)
-  status    String        @default("pending")
+  status    OrderStatus   @default(PENDING)
   items     OrderItem[]
   coupons   OrderCoupon[]
   payments  Payment[]
   createdAt DateTime      @default(now())
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  SHIPPED
+  DELIVERED
+  CANCELLED
 }
 
 model OrderItem {
@@ -100,14 +128,21 @@ model OrderItem {
 }
 
 model Payment {
-  id            Int      @id @default(autoincrement())
-  order         Order    @relation(fields: [orderId], references: [id])
-  orderId       Int
-  amount        Float
-  method        String
-  status        String   @default("pending")
-  transactionId String?
-  createdAt     DateTime @default(now())
+  id             Int           @id @default(autoincrement())
+  order          Order         @relation(fields: [orderId], references: [id])
+  orderId        Int
+  paymentMethod  PaymentMethod? @relation(fields: [paymentMethodId], references: [id])
+  paymentMethodId Int?
+  amount         Float
+  status         PaymentStatus  @default(PENDING)
+  transactionId  String?
+  createdAt      DateTime       @default(now())
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCESS
+  FAILED
 }
 
 model Review {
