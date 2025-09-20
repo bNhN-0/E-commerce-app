@@ -31,7 +31,13 @@ export async function POST(req: Request) {
   if (!user) return NextResponse.json({ error: "Not logged in" }, { status: 401 });
 
   try {
-    const body = await req.json();
+    let body: any = {};
+    try {
+      body = await req.json(); // try parsing JSON
+    } catch {
+      body = {}; // fallback if no body provided
+    }
+
     const { addressId } = body;
 
     // Get cart items for user
@@ -54,7 +60,7 @@ export async function POST(req: Request) {
     const order = await prisma.order.create({
       data: {
         userId: user.id,
-        addressId,
+        addressId: addressId ?? null, // allow null if none
         total,
         status: "PENDING",
         items: {
