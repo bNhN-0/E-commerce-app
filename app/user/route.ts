@@ -29,7 +29,7 @@ export async function POST(req: Request) {
     const user = await prisma.user.upsert({
       where: { id },
       update: { name }, // can update name later
-      create: { id, email, name, role: "customer" },
+      create: { id, email, name, role: "CUSTOMER" },
     });
 
     return NextResponse.json(user, { status: 201 });

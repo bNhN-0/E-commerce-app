@@ -46,7 +46,7 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
 
     if (res.ok) {
       alert(" Product updated!");
-      router.push("/admin/products");
+      router.push("/ADMIN/products");
       router.refresh();
     } else {
       alert(" Failed to update product");
@@ -62,7 +62,7 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
         <h1 className="text-2xl font-bold">Edit Product</h1>
         <button
           type="button"
-          onClick={() => router.push("/admin/products")}
+          onClick={() => router.push("/ADMIN/products")}
           className="bg-gray-600 text-white px-4 py-2 rounded"
         >
           ← Back

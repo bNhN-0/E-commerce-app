@@ -12,12 +12,12 @@ export async function GET() {
   }
 }
 
-// POST create product (admin only)
+// POST create product (ADMIN only)
 export async function POST(req: Request) {
   try {
     const user = await getUserSession();
     if (!user) return NextResponse.json({ error: "Not logged in" }, { status: 401 });
-    if (user.role !== "admin") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    if (user.role !== "ADMIN") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
     const body = await req.json();
     const { name, description, price, stock, imageUrl } = body;

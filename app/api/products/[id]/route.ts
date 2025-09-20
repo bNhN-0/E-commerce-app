@@ -16,12 +16,12 @@ export async function GET(_: Request, { params }: { params: { id: string } }) {
   }
 }
 
-// UPDATE product (admin only)
+// UPDATE product (ADMIN only)
 export async function PUT(req: Request, { params }: { params: { id: string } }) {
   try {
     const user = await getUserSession();
     if (!user) return NextResponse.json({ error: "Not logged in" }, { status: 401 });
-    if (user.role !== "admin") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    if (user.role !== "ADMIN") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
     const body = await req.json();
     const updated = await prisma.product.update({
@@ -35,12 +35,12 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
   }
 }
 
-// DELETE product (admin only)
+// DELETE product (ADMIN only)
 export async function DELETE(_: Request, { params }: { params: { id: string } }) {
   try {
     const user = await getUserSession();
     if (!user) return NextResponse.json({ error: "Not logged in" }, { status: 401 });
-    if (user.role !== "admin") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    if (user.role !== "ADMIN") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
     await prisma.product.delete({
       where: { id: parseInt(params.id) },
