@@ -28,7 +28,7 @@ export default function AddProductPage() {
 
     if (res.ok) {
       alert(" Product created!");
-      router.push("/ADMIN/products"); // go back to product list
+      router.push("/admin/products"); // go back to product list
       router.refresh(); // 🔑 ensure list reloads with fresh data
     } else {
       alert(" Failed to create product");
@@ -43,7 +43,7 @@ export default function AddProductPage() {
         {/* Back button */}
         <button
           type="button"
-          onClick={() => router.push("/ADMIN/products")}
+          onClick={() => router.push("/admin/products")}
           className="bg-gray-600 text-white px-4 py-2 rounded"
         >
           ← Back

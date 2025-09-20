@@ -11,7 +11,7 @@ type Product = {
   imageUrl?: string;
 };
 
-export default function ADMINProductsPage() {
+export default function adminProductsPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -62,7 +62,7 @@ export default function ADMINProductsPage() {
           </Link>
           {/*  Add Product Button */}
           <Link
-            href="/ADMIN/products/add"
+            href="/admin/products/add"
             className="bg-green-600 text-white px-4 py-2 rounded"
           >
             + Add Product
@@ -87,7 +87,7 @@ export default function ADMINProductsPage() {
             </div>
             <div className="flex gap-2">
               <Link
-                href={`/ADMIN/products/${p.id}/edit`}
+                href={`/admin/products/${p.id}/edit`}
                 className="bg-blue-500 text-white px-3 py-1 rounded"
               >
                 Edit

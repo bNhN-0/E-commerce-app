@@ -1,15 +1,40 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getUserSession } from "@/lib/auth";
+import { getUserSession } from "@/lib/auth"; // 🔑 ensures logged-in user
 
-export async function POST() {
+// GET all orders for logged-in user
+export async function GET() {
+  const user = await getUserSession();
+  if (!user) return NextResponse.json({ error: "Not logged in" }, { status: 401 });
+
   try {
-    const user = await getUserSession();
-    if (!user) {
-      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-    }
+    const orders = await prisma.order.findMany({
+      where: { userId: user.id },
+      include: {
+        items: { include: { product: true } },
+        address: true,
+        payments: true,
+      },
+      orderBy: { createdAt: "desc" },
+    });
 
-    // 1️ Fetch cart with items
+    return NextResponse.json(orders);
+  } catch (err) {
+    console.error("Failed to fetch orders:", err);
+    return NextResponse.json({ error: "Failed to fetch orders" }, { status: 500 });
+  }
+}
+
+// POST → create a new order from the cart
+export async function POST(req: Request) {
+  const user = await getUserSession();
+  if (!user) return NextResponse.json({ error: "Not logged in" }, { status: 401 });
+
+  try {
+    const body = await req.json();
+    const { addressId } = body;
+
+    // Get cart items for user
     const cart = await prisma.cart.findFirst({
       where: { userId: user.id },
       include: { items: { include: { product: true } } },
@@ -19,18 +44,19 @@ export async function POST() {
       return NextResponse.json({ error: "Cart is empty" }, { status: 400 });
     }
 
-    // 2️Calculate total
+    // Calculate total
     const total = cart.items.reduce(
-      (sum, item) => sum + item.quantity * item.product.price,
+      (sum, item) => sum + item.product.price * item.quantity,
       0
     );
 
-    //  Create order + order items
+    // Create order
     const order = await prisma.order.create({
       data: {
         userId: user.id,
+        addressId,
         total,
-        status: "pending",
+        status: "PENDING",
         items: {
           create: cart.items.map((item) => ({
             productId: item.productId,
@@ -42,31 +68,12 @@ export async function POST() {
       include: { items: true },
     });
 
-    //  Clear the cart
+    // Clear cart after order
     await prisma.cartItem.deleteMany({ where: { cartId: cart.id } });
 
     return NextResponse.json(order, { status: 201 });
-  } catch (error) {
-    console.error("Order API error:", error);
+  } catch (err) {
+    console.error("Failed to create order:", err);
     return NextResponse.json({ error: "Failed to create order" }, { status: 500 });
-  }
-}
-
-export async function GET() {
-  try {
-    const user = await getUserSession();
-    if (!user) {
-      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
-    }
-
-    const orders = await prisma.order.findMany({
-      where: { userId: user.id },
-      include: { items: { include: { product: true } } },
-      orderBy: { createdAt: "desc" },
-    });
-
-    return NextResponse.json(orders);
-  } catch (error) {
-    return NextResponse.json({ error: "Failed to fetch orders" }, { status: 500 });
   }
 }
