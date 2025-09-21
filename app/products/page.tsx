@@ -1,22 +1,8 @@
-
 "use client";
-
-{/*  
-Component mounts → loading = true.
-
-Fetch starts.
-
-If success → products set, then loading = false.
-
-If error → error logged, then loading = false.
-
-UI updates → either shows products or shows nothing (but not “Loading…” anymore)
- */}
-
-
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 
 type Product = {
   id: number;
@@ -40,18 +26,28 @@ export default function ProductsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const searchParams = useSearchParams();
+  const category = searchParams.get("category"); // ✅ get category from query string
+
   const fetchProducts = async (page = 1) => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`/api/products?page=${page}&limit=12`, {
+      const query = new URLSearchParams({
+        page: page.toString(),
+        limit: "12",
+        ...(category ? { category } : {}), // ✅ add category if present
+      });
+
+      const res = await fetch(`/api/products?${query.toString()}`, {
         cache: "no-store",
       });
+
       if (!res.ok) throw new Error("Failed to fetch products");
 
       const data = await res.json();
-      setProducts(data.data); //  extract the array
-      setPagination(data.pagination); //  save pagination info
+      setProducts(data.data || []); // ensure array
+      setPagination(data.pagination || null);
     } catch (err) {
       console.error("Failed to fetch products:", err);
       setError("Could not load products. Please try again.");
@@ -60,9 +56,10 @@ export default function ProductsPage() {
     }
   };
 
+  // refetch when category changes
   useEffect(() => {
     fetchProducts();
-  }, []);
+  }, [category]);
 
   if (loading) return <p className="p-4">⏳ Loading products...</p>;
 
@@ -80,11 +77,19 @@ export default function ProductsPage() {
     );
 
   if (products.length === 0)
-    return <p className="p-6">No products available.</p>;
+    return (
+      <p className="p-6">
+        {category
+          ? `No products available in ${category}.`
+          : "No products available."}
+      </p>
+    );
 
   return (
     <div className="p-6">
-      <h1 className="text-2xl font-bold mb-4">Products</h1>
+      <h1 className="text-2xl font-bold mb-4">
+        {category ? `Products in ${category}` : "All Products"}
+      </h1>
 
       {/* Product grid */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

@@ -2,12 +2,23 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getUserSession } from "@/lib/auth";
 
-// GET all products (public, flexible)
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
     const page = searchParams.get("page");
     const limit = searchParams.get("limit");
+    const category = searchParams.get("category"); // ✅ new: category filter
+
+    // build where clause
+    const where: any = {};
+    if (category) {
+      where.category = {
+        name: {
+          equals: category,
+          mode: "insensitive", // case-insensitive match
+        },
+      };
+    }
 
     if (page && limit) {
       // --- Paginated Response ---
@@ -19,6 +30,7 @@ export async function GET(req: Request) {
         prisma.product.findMany({
           skip,
           take: limitNum,
+          where, // ✅ filter applied
           select: {
             id: true,
             name: true,
@@ -30,7 +42,7 @@ export async function GET(req: Request) {
           },
           orderBy: { createdAt: "desc" },
         }),
-        prisma.product.count(),
+        prisma.product.count({ where }), // ✅ count with filter
       ]);
 
       return NextResponse.json({
@@ -45,6 +57,7 @@ export async function GET(req: Request) {
     } else {
       // --- Flat Array Response ---
       const products = await prisma.product.findMany({
+        where, // ✅ filter applied
         select: {
           id: true,
           name: true,

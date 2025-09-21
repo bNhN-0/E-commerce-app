@@ -8,19 +8,19 @@ import { assets } from "@/assets/assets";
 const heroBanners = [
   {
     id: 1,
-    title: "Shop Smarter, Live Better",
-    desc: "Discover exclusive deals on fashion, electronics, and more.",
+    title: "Shop Smarter, Dress Better",
+    desc: "Discover exclusive deals on fashion – style starts here at Mingala Mart.",
     cta: "🛍 Browse Products",
-    link: "/products",
-    image: assets.fashion_banner, // StaticImport or string
+    link: "/products?category=FASHION",
+    image: assets.fashion_banner,
   },
   {
     id: 2,
     title: "New Arrivals Just Dropped",
     desc: "Check out the latest fashion trends and must-have gadgets.",
     cta: "✨ Explore Now",
-    link: "/products",
-    image:  "/images/hero-tech.jpg",
+    link: "/products?category=ELECTRONICS", 
+    image: assets.electronic_banner,
   },
   {
     id: 3,
@@ -59,7 +59,7 @@ export default function HeroSection() {
           />
         </AnimatePresence>
 
-        {/* Dark overlay (also non-interactive) */}
+        {/* Dark overlay */}
         <div className="absolute inset-0 bg-black/40 pointer-events-none" />
 
         {/* Text & CTA */}
@@ -82,7 +82,6 @@ export default function HeroSection() {
           </Link>
         </motion.div>
 
-        {/* Arrows (now on top, clickable) */}
         <button
           type="button"
           aria-label="Previous slide"

@@ -18,7 +18,7 @@ export default function HomePage() {
   useEffect(() => {
     fetch("/api/products")
       .then((res) => res.json())
-      .then((data) => setProducts(data.data || data)) // ✅ handle paginated or plain response
+      .then((data) => setProducts(data.data || data)) 
       .finally(() => setLoading(false));
   }, []);
 
