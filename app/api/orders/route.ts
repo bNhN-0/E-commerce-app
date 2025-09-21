@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getUserSession } from "@/lib/auth"; // 🔑 ensures logged-in user
+import { getUserSession } from "@/lib/auth"; // ensures logged-in user
 
 // GET all orders for logged-in user
 export async function GET() {

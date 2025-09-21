@@ -25,13 +25,14 @@ export default function Navbar() {
   return (
     <nav className="bg-gray-800 text-white p-4 flex justify-between items-center">
       <div className="font-bold text-lg">
-        <Link href="/">Shoply</Link>
+        <Link href="/">E-commerce template</Link>
       </div>
       <div className="space-x-4">
         <Link href="/">Home</Link>
         <Link href="/cart">Cart</Link>
         <Link href="/orders">Orders</Link>
         <Link href="/account">Account</Link>
+        <Link href="/admin/products">Admin Dashboard</Link>
         {!user ? (
           <Link href="/auth/">Login / Signup</Link>
         ) : (

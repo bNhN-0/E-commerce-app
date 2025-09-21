@@ -29,7 +29,7 @@ export default function AddProductPage() {
     if (res.ok) {
       alert(" Product created!");
       router.push("/admin/products"); // go back to product list
-      router.refresh(); // 🔑 ensure list reloads with fresh data
+      router.refresh(); // ensure list reloads with fresh data
     } else {
       alert(" Failed to create product");
     }

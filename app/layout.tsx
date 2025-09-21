@@ -2,7 +2,7 @@ import Navbar from "../app/components/Navbar";
 import "./globals.css";
 
 export const metadata = {
-  title: "Shoply",
+  title: "E-commerce template",
   description: "Next.js + Supabase E-Commerce App",
 };
 

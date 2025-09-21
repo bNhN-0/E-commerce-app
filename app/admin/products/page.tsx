@@ -11,7 +11,7 @@ type Product = {
   imageUrl?: string;
 };
 
-export default function adminProductsPage() {
+export default function AdminProductsPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
 
