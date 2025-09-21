@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import HeroSection from "../components/HeroSection";
 
 type Product = {
   id: number;
@@ -24,24 +25,8 @@ export default function HomePage() {
   return (
     <main className="max-w-7xl mx-auto">
       {/* Hero Section */}
-      <section className="relative bg-gradient-to-r from-blue-600 to-indigo-700 text-white py-20 text-center rounded-lg shadow-lg mb-12">
-        <h1 className="text-5xl font-extrabold mb-4">
-          Shop Smarter, Live Better
-        </h1>
-        <p className="mb-6 text-lg opacity-90">
-          Discover exclusive deals on fashion, electronics, and more.  
-          Your one-stop shop for everything.
-        </p>
-        <div className="flex justify-center gap-6">
-          <Link
-            href="/products"
-            className="bg-white text-blue-700 px-8 py-3 rounded-lg shadow font-semibold hover:bg-gray-100 transition"
-          >
-            🛍 Browse Products
-          </Link>
-          
-        </div>
-      </section>
+       <HeroSection></HeroSection>
+
 
       {/* Featured Categories */}
       <section className="mb-16">
