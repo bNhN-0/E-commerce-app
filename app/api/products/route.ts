@@ -30,7 +30,7 @@ export async function GET(req: Request) {
         prisma.product.findMany({
           skip,
           take: limitNum,
-          where, // ✅ filter applied
+          where, //  filter applied
           select: {
             id: true,
             name: true,
@@ -42,7 +42,7 @@ export async function GET(req: Request) {
           },
           orderBy: { createdAt: "desc" },
         }),
-        prisma.product.count({ where }), // ✅ count with filter
+        prisma.product.count({ where }), //  count with filter
       ]);
 
       return NextResponse.json({
@@ -57,7 +57,7 @@ export async function GET(req: Request) {
     } else {
       // --- Flat Array Response ---
       const products = await prisma.product.findMany({
-        where, // ✅ filter applied
+        where, //  filter applied
         select: {
           id: true,
           name: true,
