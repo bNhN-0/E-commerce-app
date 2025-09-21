@@ -1,25 +1,26 @@
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
   directUrl = env("DIRECT_URL")
 }
+
 generator client {
   provider = "prisma-client-js"
 }
 
 model User {
-  id        String          @id @default(uuid()) // from Supabase auth
-  name      String
-  email     String          @unique
-  phone     String?         // optional for profile
-  avatarUrl String?         // profile picture
-  role      Role            @default(CUSTOMER)
-  addresses Address[]
+  id             String          @id @default(uuid()) // from Supabase auth
+  name           String
+  email          String          @unique
+  phone          String?         // optional for profile
+  avatarUrl      String?         // profile picture
+  role           Role            @default(CUSTOMER)
+  addresses      Address[]
   paymentMethods PaymentMethod[]
-  carts     Cart[]
-  orders    Order[]
-  reviews   Review[]
-  createdAt DateTime        @default(now())
+  carts          Cart[]
+  orders         Order[]
+  reviews        Review[]
+  createdAt      DateTime        @default(now())
 }
 
 enum Role {
@@ -57,24 +58,33 @@ model PaymentMethod {
 
 model Category {
   id          Int       @id @default(autoincrement())
+  type        CategoryType
   name        String    @unique
   description String?
   products    Product[]
 }
 
+enum CategoryType {
+  FASHION
+  ELECTRONICS
+  HOME_LIVING
+  BEAUTY_HEALTH
+  SPORTS_OUTDOORS
+}
+
 model Product {
-  id          Int           @id @default(autoincrement())
+  id          Int         @id @default(autoincrement())
   name        String
   description String?
   price       Float
-  stock       Int           @default(0)
-  category    Category?     @relation(fields: [categoryId], references: [id])
-  categoryId  Int?
+  stock       Int         @default(0)
+  category    Category    @relation(fields: [categoryId], references: [id])
+  categoryId  Int
   imageUrl    String?
   reviews     Review[]
   cartItems   CartItem[]
   orderItems  OrderItem[]
-  createdAt   DateTime      @default(now())
+  createdAt   DateTime    @default(now())
 }
 
 model Cart {
@@ -128,15 +138,15 @@ model OrderItem {
 }
 
 model Payment {
-  id             Int           @id @default(autoincrement())
-  order          Order         @relation(fields: [orderId], references: [id])
-  orderId        Int
-  paymentMethod  PaymentMethod? @relation(fields: [paymentMethodId], references: [id])
+  id              Int            @id @default(autoincrement())
+  order           Order          @relation(fields: [orderId], references: [id])
+  orderId         Int
+  paymentMethod   PaymentMethod? @relation(fields: [paymentMethodId], references: [id])
   paymentMethodId Int?
-  amount         Float
-  status         PaymentStatus  @default(PENDING)
-  transactionId  String?
-  createdAt      DateTime       @default(now())
+  amount          Float
+  status          PaymentStatus  @default(PENDING)
+  transactionId   String?
+  createdAt       DateTime       @default(now())
 }
 
 enum PaymentStatus {
