@@ -1,14 +1,13 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getUserSession } from "@/lib/auth";
-import { CategoryType } from "@prisma/client";
 
 // GET one product (public)
 export async function GET(
   _: Request,
-  ctx: { params: Promise<{ id: string }> } // 👈 params is a Promise
+  ctx: { params: Promise<{ id: string }> } // params is Promise
 ) {
-  const { id } = await ctx.params; // 👈 await it first
+  const { id } = await ctx.params; // ✅ unwrap first
   try {
     const product = await prisma.product.findUnique({
       where: { id: parseInt(id) },
@@ -29,36 +28,14 @@ export async function PUT(
   ctx: { params: Promise<{ id: string }> }
 ) {
   const { id } = await ctx.params;
+
   try {
     const user = await getUserSession();
     if (!user) return NextResponse.json({ error: "Not logged in" }, { status: 401 });
     if (user.role !== "ADMIN") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
     const body = await req.json();
-    const { name, description, price, stock, imageUrl, categoryType } = body;
-
-    let categoryId: number | undefined;
-
-    if (categoryType) {
-      // validate enum
-      if (!Object.values(CategoryType).includes(categoryType)) {
-        return NextResponse.json({ error: "Invalid category type" }, { status: 400 });
-      }
-
-      const categoryName = categoryType as string;
-
-      const category = await prisma.category.upsert({
-        where: { name: categoryName },
-        update: {},
-        create: {
-          name: categoryName,
-          description: `${categoryName} category`,
-          type: categoryType,
-        },
-      });
-
-      categoryId = category.id;
-    }
+    const { name, description, price, stock, imageUrl, categoryId } = body;
 
     const updated = await prisma.product.update({
       where: { id: parseInt(id) },
@@ -68,8 +45,9 @@ export async function PUT(
         price,
         stock,
         imageUrl,
-        ...(categoryId ? { categoryId } : {}),
+        ...(categoryId ? { categoryId } : {}), // ✅ update directly by categoryId
       },
+      include: { category: true },
     });
 
     return NextResponse.json(updated);
@@ -85,6 +63,7 @@ export async function DELETE(
   ctx: { params: Promise<{ id: string }> }
 ) {
   const { id } = await ctx.params;
+
   try {
     const user = await getUserSession();
     if (!user) return NextResponse.json({ error: "Not logged in" }, { status: 401 });
@@ -101,20 +80,8 @@ export async function DELETE(
   }
 }
 
-
 // GET one product
 /*
-export async function GET(_: Request, { params }: { params: { id: string } }) {
-  try {
-    const product = await prisma.product.findUnique({
-      where: { id: parseInt(params.id) },
-    });
-    if (!product) return NextResponse.json({ error: "Not found" }, { status: 404 });
-    return NextResponse.json(product);
-  } catch (error) {
-    return NextResponse.json({ error: "Failed to fetch product" }, { status: 500 });
-  }
-}
 
 //export async function GET(request: Request, context: { params: ... }) {}
 

@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getUserSession } from "@/lib/auth";
-import { CategoryType } from "@prisma/client";
 
 // GET all products (public)
 export async function GET() {
@@ -24,25 +23,17 @@ export async function POST(req: Request) {
     if (user.role !== "ADMIN") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
     const body = await req.json();
-    const { name, description, price, stock, imageUrl, categoryType } = body;
+    const { name, description, price, stock, imageUrl, categoryId } = body;
 
-    // validate categoryType is one of the enums
-    if (!Object.values(CategoryType).includes(categoryType)) {
-      return NextResponse.json({ error: "Invalid category type" }, { status: 400 });
+    if (!categoryId) {
+      return NextResponse.json({ error: "Category is required" }, { status: 400 });
     }
 
-    // convert enum value to string for DB
-    const categoryName = categoryType as string;
-
-    const category = await prisma.category.upsert({
-    where: { name: categoryName },
-    update: {},
-    create: {
-    name: categoryName,
-    description: `${categoryName} category`,
-    type: categoryType, 
-  },
-});
+    // ensure the category exists
+    const category = await prisma.category.findUnique({ where: { id: categoryId } });
+    if (!category) {
+      return NextResponse.json({ error: "Category not found" }, { status: 404 });
+    }
 
     const newProduct = await prisma.product.create({
       data: {
@@ -51,8 +42,9 @@ export async function POST(req: Request) {
         price,
         stock,
         imageUrl,
-        categoryId: category.id,
+        categoryId,
       },
+      include: { category: true },
     });
 
     return NextResponse.json(newProduct, { status: 201 });

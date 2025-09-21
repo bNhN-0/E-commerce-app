@@ -20,7 +20,7 @@ type Product = {
 };
 
 export default function EditProductPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params); // unwrap the promise
+  const { id } = use(params); 
   const [product, setProduct] = useState<Product | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
