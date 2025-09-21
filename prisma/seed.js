@@ -4,18 +4,7 @@ const prisma = new PrismaClient();
 async function main() {
   console.log("Seeding database...");
 
-  // --- USERS ---
-  const users = [];
-  for (let i = 1; i <= 5; i++) {
-    const user = await prisma.user.create({
-      data: {
-        name: `User ${i}`,
-        email: `user${i}@example.com`,
-        password: "password123",
-      },
-    });
-    users.push(user);
-  }
+
 
   // --- CATEGORIES ---
   const categories = [];
@@ -43,29 +32,6 @@ async function main() {
       },
     });
     products.push(product);
-  }
-
-  // --- CARTS ---
-  const carts = [];
-  for (const user of users) {
-    const cart = await prisma.cart.create({
-      data: {
-        userId: user.id,
-      },
-    });
-    carts.push(cart);
-  }
-
-  // --- CART ITEMS ---
-  for (const cart of carts) {
-    const product = products[Math.floor(Math.random() * products.length)];
-    await prisma.cartItem.create({
-      data: {
-        cartId: cart.id,
-        productId: product.id,
-        quantity: Math.floor(Math.random() * 3) + 1,
-      },
-    });
   }
 
   // --- COUPONS ---

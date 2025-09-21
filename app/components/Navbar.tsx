@@ -30,6 +30,8 @@ export default function Navbar() {
       <div className="space-x-4">
         <Link href="/">Home</Link>
         <Link href="/cart">Cart</Link>
+        <Link href="/orders">Orders</Link>
+        <Link href="/account">Account</Link>
         {!user ? (
           <Link href="/auth/">Login / Signup</Link>
         ) : (
