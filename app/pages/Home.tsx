@@ -17,79 +17,84 @@ export default function HomePage() {
   useEffect(() => {
     fetch("/api/products")
       .then((res) => res.json())
-      .then((data) => setProducts(data))
+      .then((data) => setProducts(data.data || data)) // ✅ handle paginated or plain response
       .finally(() => setLoading(false));
   }, []);
 
   return (
-    <main className="p-6 max-w-6xl mx-auto">
+    <main className="max-w-7xl mx-auto">
       {/* Hero Section */}
-      <section className="text-center mb-12">
-        <h1 className="text-4xl font-extrabold mb-4">
-          🛍️ Welcome to <span className="text-blue-600"></span>
+      <section className="relative bg-gradient-to-r from-blue-600 to-indigo-700 text-white py-20 text-center rounded-lg shadow-lg mb-12">
+        <h1 className="text-5xl font-extrabold mb-4">
+          Shop Smarter, Live Better
         </h1>
-        <p className="mb-6 text-gray-600 text-lg">
-          Discover amazing products, add them to your cart, and enjoy seamless checkout. <br />
-          <span className="font-medium text-gray-800">Admins</span> can manage inventory with ease.
+        <p className="mb-6 text-lg opacity-90">
+          Discover exclusive deals on fashion, electronics, and more.  
+          Your one-stop shop for everything.
         </p>
-        <div className="flex justify-center gap-4">
+        <div className="flex justify-center gap-6">
           <Link
             href="/products"
-            className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg shadow transition"
+            className="bg-white text-blue-700 px-8 py-3 rounded-lg shadow font-semibold hover:bg-gray-100 transition"
           >
-            Browse Products
+            🛍 Browse Products
           </Link>
-          <Link
-            href="/account/profile"
-            className="bg-gray-200 hover:bg-gray-300 text-gray-800 px-6 py-3 rounded-lg shadow transition"
-          >
-            My Account
-          </Link>
+          
         </div>
       </section>
 
       {/* Featured Categories */}
-      <section className="mb-12">
-        <h2 className="text-2xl font-semibold mb-4">Featured Categories</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
-          <div className="bg-gray-100 rounded-lg p-6 text-center shadow hover:shadow-md transition">
-            <p className="text-lg font-semibold">👕 Fashion</p>
-          </div>
-          <div className="bg-gray-100 rounded-lg p-6 text-center shadow hover:shadow-md transition">
-            <p className="text-lg font-semibold">💻 Electronics</p>
-          </div>
-          <div className="bg-gray-100 rounded-lg p-6 text-center shadow hover:shadow-md transition">
-            <p className="text-lg font-semibold">🏠 Home & Living</p>
-          </div>
+      <section className="mb-16">
+        <h2 className="text-3xl font-semibold mb-6 text-center">
+          Featured Categories
+        </h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-6">
+          {[
+            { icon: "👕", name: "Fashion" },
+            { icon: "💻", name: "Electronics" },
+            { icon: "🏠", name: "Home & Living" },
+            { icon: "💄", name: "Beauty & Health" },
+            { icon: "⚽", name: "Sports & Outdoors" },
+          ].map((cat) => (
+            <div
+              key={cat.name}
+              className="bg-gray-100 rounded-lg p-8 text-center shadow hover:shadow-lg transition cursor-pointer"
+            >
+              <p className="text-3xl mb-2">{cat.icon}</p>
+              <p className="text-lg font-semibold">{cat.name}</p>
+            </div>
+          ))}
         </div>
       </section>
 
       {/* Featured Products */}
-      <section className="mb-12">
-        <h2 className="text-2xl font-semibold mb-4">Featured Products</h2>
+      <section className="mb-16">
+        <h2 className="text-3xl font-semibold mb-6 text-center">
+          Featured Products
+        </h2>
         {loading ? (
-          <p>Loading products...</p>
+          <p className="text-center text-gray-500">Loading products...</p>
         ) : products.length === 0 ? (
-          <p className="text-gray-500">No products available.</p>
+          <p className="text-center text-gray-500">No products available.</p>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
-            {products.slice(0, 6).map((p) => (
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+            {products.slice(0, 8).map((p) => (
               <div
                 key={p.id}
-                className="border rounded-lg shadow hover:shadow-md transition p-4 flex flex-col"
+                className="border rounded-lg shadow hover:shadow-lg transition p-4 flex flex-col"
               >
                 {p.imageUrl ? (
                   <img
                     src={p.imageUrl}
                     alt={p.name}
-                    className="w-full h-40 object-cover rounded mb-3"
+                    className="w-full h-48 object-cover rounded mb-3"
                   />
                 ) : (
-                  <div className="w-full h-40 bg-gray-200 flex items-center justify-center mb-3 rounded">
+                  <div className="w-full h-48 bg-gray-200 flex items-center justify-center mb-3 rounded">
                     <span className="text-gray-500">No Image</span>
                   </div>
                 )}
-                <h3 className="font-semibold">{p.name}</h3>
+                <h3 className="font-semibold text-lg">{p.name}</h3>
                 <p className="text-gray-600 mb-2">${p.price}</p>
                 <Link
                   href={`/products/${p.id}`}
@@ -103,17 +108,33 @@ export default function HomePage() {
         )}
       </section>
 
+      {/* Features Row */}
+      <section className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-16">
+        <div className="p-6 bg-gray-100 rounded-lg shadow text-center">
+          🚚 <p className="font-semibold mt-2">Free Shipping</p>
+          <p className="text-sm text-gray-600">On all orders over $50</p>
+        </div>
+        <div className="p-6 bg-gray-100 rounded-lg shadow text-center">
+          🔒 <p className="font-semibold mt-2">Secure Payment</p>
+          <p className="text-sm text-gray-600">100% safe & encrypted</p>
+        </div>
+        <div className="p-6 bg-gray-100 rounded-lg shadow text-center">
+          📞 <p className="font-semibold mt-2">24/7 Support</p>
+          <p className="text-sm text-gray-600">We’re here to help anytime</p>
+        </div>
+      </section>
+
       {/* CTA */}
-      <section className="bg-blue-50 border border-blue-200 rounded-lg p-8 text-center">
-        <h2 className="text-xl font-bold mb-2">Ready to start shopping?</h2>
-        <p className="text-gray-600 mb-4">
-          Explore our wide range of products and enjoy a smooth shopping experience.
+      <section className="bg-blue-600 text-white rounded-lg p-12 text-center shadow-lg">
+        <h2 className="text-3xl font-bold mb-4">Ready to start shopping?</h2>
+        <p className="mb-6 text-lg">
+          Explore thousands of products and get the best deals today!
         </p>
         <Link
           href="/products"
-          className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg shadow transition"
+          className="bg-white text-blue-700 px-8 py-3 rounded-lg shadow font-semibold hover:bg-gray-100 transition"
         >
-          Shop Now
+          Start Shopping →
         </Link>
       </section>
     </main>
