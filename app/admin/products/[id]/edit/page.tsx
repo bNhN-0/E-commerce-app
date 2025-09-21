@@ -3,6 +3,12 @@
 import { use, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
+type Category = {
+  id: number;
+  name: string;
+  type: string;
+};
+
 type Product = {
   id: number;
   name: string;
@@ -10,29 +16,43 @@ type Product = {
   price: number;
   stock: number;
   imageUrl?: string;
+  categoryId?: number;
 };
 
 export default function EditProductPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params); //  unwrap the promise
+  const { id } = use(params); // unwrap the promise
   const [product, setProduct] = useState<Product | null>(null);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 
-  useEffect(() => {
-    const fetchProduct = async () => {
-      try {
-        const res = await fetch(`/api/products/${id}`);
-        const data = await res.json();
-        setProduct(data);
-      } catch (err) {
-        console.error("Failed to fetch product:", err);
-      } finally {
-        setLoading(false);
-      }
-    };
+  // fetch product + categories
+useEffect(() => {
+  const fetchData = async () => {
+    try {
+      const [productRes, catRes] = await Promise.all([
+        fetch(`/api/products/${id}`),
+        fetch("/api/categories"),
+      ]);
 
-    fetchProduct();
-  }, [id]);
+      if (!productRes.ok) throw new Error("Failed to load product");
+      if (!catRes.ok) throw new Error("Failed to load categories");
+
+      const productData = await productRes.json();
+      const categoryData = await catRes.json();
+
+      setProduct(productData);
+      setCategories(categoryData);
+    } catch (err) {
+      console.error("Failed to fetch data:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  fetchData();
+}, [id]);
+
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -45,11 +65,11 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
     });
 
     if (res.ok) {
-      alert(" Product updated!");
-      router.push("/ADMIN/products");
+      alert("✅ Product updated!");
+      router.push("/admin/products");
       router.refresh();
     } else {
-      alert(" Failed to update product");
+      alert("❌ Failed to update product");
     }
   };
 
@@ -62,7 +82,7 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
         <h1 className="text-2xl font-bold">Edit Product</h1>
         <button
           type="button"
-          onClick={() => router.push("/ADMIN/products")}
+          onClick={() => router.push("/admin/products")}
           className="bg-gray-600 text-white px-4 py-2 rounded"
         >
           ← Back
@@ -113,6 +133,23 @@ export default function EditProductPage({ params }: { params: Promise<{ id: stri
           placeholder="Image URL"
           className="border p-2 w-full"
         />
+
+        {/* Category Selector */}
+        <select
+          value={product.categoryId ?? ""}
+          onChange={(e) =>
+            setProduct({ ...product, categoryId: Number(e.target.value) })
+          }
+          className="border p-2 w-full"
+          required
+        >
+          <option value="">-- Select Category --</option>
+          {categories.map((cat) => (
+            <option key={cat.id} value={cat.id}>
+              {cat.name} ({cat.type})
+            </option>
+          ))}
+        </select>
 
         <button
           type="submit"

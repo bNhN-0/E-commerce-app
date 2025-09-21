@@ -4,10 +4,14 @@ import { getUserSession } from "@/lib/auth";
 import { CategoryType } from "@prisma/client";
 
 // GET one product (public)
-export async function GET(_: Request, { params }: { params: { id: string } }) {
+export async function GET(
+  _: Request,
+  ctx: { params: Promise<{ id: string }> } // 👈 params is a Promise
+) {
+  const { id } = await ctx.params; // 👈 await it first
   try {
     const product = await prisma.product.findUnique({
-      where: { id: parseInt(params.id) },
+      where: { id: parseInt(id) },
       include: { category: true },
     });
 
@@ -20,7 +24,11 @@ export async function GET(_: Request, { params }: { params: { id: string } }) {
 }
 
 // UPDATE product (ADMIN only)
-export async function PUT(req: Request, { params }: { params: { id: string } }) {
+export async function PUT(
+  req: Request,
+  ctx: { params: Promise<{ id: string }> }
+) {
+  const { id } = await ctx.params;
   try {
     const user = await getUserSession();
     if (!user) return NextResponse.json({ error: "Not logged in" }, { status: 401 });
@@ -32,6 +40,7 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
     let categoryId: number | undefined;
 
     if (categoryType) {
+      // validate enum
       if (!Object.values(CategoryType).includes(categoryType)) {
         return NextResponse.json({ error: "Invalid category type" }, { status: 400 });
       }
@@ -39,26 +48,27 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
       const categoryName = categoryType as string;
 
       const category = await prisma.category.upsert({
-  where: { name: categoryName },
-  update: {},
-  create: {
-    name: categoryName,
-    description: `${categoryName} category`,
-    type: categoryType, 
-  },
-});
+        where: { name: categoryName },
+        update: {},
+        create: {
+          name: categoryName,
+          description: `${categoryName} category`,
+          type: categoryType,
+        },
+      });
+
       categoryId = category.id;
     }
 
     const updated = await prisma.product.update({
-      where: { id: parseInt(params.id) },
+      where: { id: parseInt(id) },
       data: {
         name,
         description,
         price,
         stock,
         imageUrl,
-        ...(categoryId ? { categoryId } : {}), // only update if category provided
+        ...(categoryId ? { categoryId } : {}),
       },
     });
 
@@ -70,14 +80,18 @@ export async function PUT(req: Request, { params }: { params: { id: string } }) 
 }
 
 // DELETE product (ADMIN only)
-export async function DELETE(_: Request, { params }: { params: { id: string } }) {
+export async function DELETE(
+  _: Request,
+  ctx: { params: Promise<{ id: string }> }
+) {
+  const { id } = await ctx.params;
   try {
     const user = await getUserSession();
     if (!user) return NextResponse.json({ error: "Not logged in" }, { status: 401 });
     if (user.role !== "ADMIN") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
     await prisma.product.delete({
-      where: { id: parseInt(params.id) },
+      where: { id: parseInt(id) },
     });
 
     return NextResponse.json({ message: "Deleted successfully" });
@@ -86,7 +100,6 @@ export async function DELETE(_: Request, { params }: { params: { id: string } })
     return NextResponse.json({ error: "Failed to delete product" }, { status: 500 });
   }
 }
-
 
 
 // GET one product
