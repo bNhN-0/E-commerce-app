@@ -2,50 +2,69 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getUserSession } from "@/lib/auth";
 
-// GET all products (public, optimized)
+// GET all products (public, flexible)
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
-    const page = parseInt(searchParams.get("page") || "1");
-    const limit = parseInt(searchParams.get("limit") || "12");
-    const skip = (page - 1) * limit;
+    const page = searchParams.get("page");
+    const limit = searchParams.get("limit");
 
-    // Fetch only necessary fields + category name
-    const products = await prisma.product.findMany({
-      skip,
-      take: limit,
-      select: {
-        id: true,
-        name: true,
-        description: true,
-        price: true,
-        stock: true,
-        imageUrl: true,
-        category: {
+    if (page && limit) {
+      // --- Paginated Response ---
+      const pageNum = parseInt(page) || 1;
+      const limitNum = parseInt(limit) || 12;
+      const skip = (pageNum - 1) * limitNum;
+
+      const [products, total] = await Promise.all([
+        prisma.product.findMany({
+          skip,
+          take: limitNum,
           select: {
             id: true,
             name: true,
-            type: true,
+            description: true,
+            price: true,
+            stock: true,
+            imageUrl: true,
+            category: { select: { id: true, name: true, type: true } },
           },
+          orderBy: { createdAt: "desc" },
+        }),
+        prisma.product.count(),
+      ]);
+
+      return NextResponse.json({
+        data: products,
+        pagination: {
+          page: pageNum,
+          limit: limitNum,
+          total,
+          totalPages: Math.ceil(total / limitNum),
         },
-      },
-      orderBy: { createdAt: "desc" }, // newest first
-    });
+      });
+    } else {
+      // --- Flat Array Response ---
+      const products = await prisma.product.findMany({
+        select: {
+          id: true,
+          name: true,
+          description: true,
+          price: true,
+          stock: true,
+          imageUrl: true,
+          category: { select: { id: true, name: true, type: true } },
+        },
+        orderBy: { createdAt: "desc" },
+      });
 
-    const total = await prisma.product.count();
-
-    return NextResponse.json({
-      data: products,
-      pagination: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit),
-      },
-    });
+      return NextResponse.json(products);
+    }
   } catch (error) {
     console.error("Failed to fetch products:", error);
-    return NextResponse.json({ error: "Failed to fetch products" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Failed to fetch products" },
+      { status: 500 }
+    );
   }
 }
 

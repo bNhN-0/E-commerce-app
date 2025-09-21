@@ -51,7 +51,6 @@ export default function CartPage() {
       });
 
       if (!res.ok) {
-        // Rollback if error
         alert("❌ Failed to update cart, refreshing...");
         const data = await fetch("/api/cart").then((r) => r.json());
         setCart(data);
