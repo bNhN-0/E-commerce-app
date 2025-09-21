@@ -26,7 +26,7 @@ export default function HomePage() {
       {/* Hero Section */}
       <section className="text-center mb-12">
         <h1 className="text-4xl font-extrabold mb-4">
-          🛍️ Welcome to <span className="text-blue-600">Shoply</span>
+          🛍️ Welcome to <span className="text-blue-600"></span>
         </h1>
         <p className="mb-6 text-gray-600 text-lg">
           Discover amazing products, add them to your cart, and enjoy seamless checkout. <br />
