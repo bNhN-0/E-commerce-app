@@ -7,7 +7,7 @@ export async function GET(
   _: Request,
   ctx: { params: Promise<{ id: string }> } // params is Promise
 ) {
-  const { id } = await ctx.params; // ✅ unwrap first
+  const { id } = await ctx.params; // unwrap first
   try {
     const product = await prisma.product.findUnique({
       where: { id: parseInt(id) },
@@ -45,7 +45,7 @@ export async function PUT(
         price,
         stock,
         imageUrl,
-        ...(categoryId ? { categoryId } : {}), // ✅ update directly by categoryId
+        ...(categoryId ? { categoryId } : {}), //  update directly by categoryId
       },
       include: { category: true },
     });

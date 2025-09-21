@@ -26,25 +26,37 @@ export default function CartPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  const updateQuantity = async (productId: number, newQty: number) => {
-    const res = await fetch("/api/cart/update", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ productId, quantity: newQty }),
-    });
+  // debounce timer (global per component)
+  let timer: NodeJS.Timeout;
 
-    if (res.ok) {
-      setCart((prev) => ({
-        ...prev,
-        items: prev.items
-          .map((item) =>
-            item.product.id === productId
-              ? { ...item, quantity: newQty }
-              : item
-          )
-          .filter((item) => item.quantity > 0), // remove if zero
-      }));
-    }
+  const updateQuantity = (productId: number, newQty: number) => {
+    setCart((prev) => ({
+      ...prev,
+      items: prev.items
+        .map((item) =>
+          item.product.id === productId
+            ? { ...item, quantity: newQty }
+            : item
+        )
+        .filter((item) => item.quantity > 0), // remove if quantity = 0
+    }));
+
+    // Debounce API call
+    clearTimeout(timer);
+    timer = setTimeout(async () => {
+      const res = await fetch("/api/cart/update", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ productId, quantity: newQty }),
+      });
+
+      if (!res.ok) {
+        // Rollback if error
+        alert("❌ Failed to update cart, refreshing...");
+        const data = await fetch("/api/cart").then((r) => r.json());
+        setCart(data);
+      }
+    }, 400); 
   };
 
   const handleCheckout = async () => {
