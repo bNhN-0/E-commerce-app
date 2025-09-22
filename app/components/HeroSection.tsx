@@ -19,7 +19,7 @@ const heroBanners = [
     title: "New Arrivals Just Dropped",
     desc: "Check out the latest fashion trends and must-have gadgets.",
     cta: "✨ Explore Now",
-    link: "/products?category=ELECTRONICS", 
+    link: "/products?category=ELECTRONICS",
     image: assets.electronic_banner,
   },
   {
@@ -39,13 +39,12 @@ export default function HeroSection() {
   const prevSlide = () => setIndex((i) => (i - 1 + heroBanners.length) % heroBanners.length);
 
   const current = heroBanners[index];
-  const bgImage =
-    typeof current.image === "string" ? current.image : current.image.src;
+  const bgImage = typeof current.image === "string" ? current.image : current.image.src;
 
   return (
-    <section className="relative mb-12">
-      <div className="relative h-[450px] md:h-[550px] overflow-hidden rounded-lg shadow-lg">
-        {/* Background Image (fades) */}
+    <section className="relative mb-8">
+      <div className="relative h-[260px] md:h-[340px] max-w-4xl mx-auto overflow-hidden rounded-lg shadow-md">
+        {/* Background Image */}
         <AnimatePresence mode="wait">
           <motion.img
             key={`bg-${current.id}`}
@@ -65,28 +64,27 @@ export default function HeroSection() {
         {/* Text & CTA */}
         <motion.div
           key={`content-${current.id}`}
-          className="relative z-10 flex h-full flex-col items-center justify-center px-6 text-center text-white"
-          initial={{ opacity: 0, y: 40 }}
+          className="relative z-10 flex h-full flex-col items-center justify-center px-4 text-center text-white"
+          initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6 }}
+          transition={{ duration: 0.5 }}
         >
-          <h1 className="text-4xl md:text-5xl font-extrabold mb-4">
-            {current.title}
-          </h1>
-          <p className="mb-6 text-lg max-w-2xl">{current.desc}</p>
+          <h1 className="text-2xl md:text-3xl font-bold mb-2">{current.title}</h1>
+          <p className="mb-4 text-sm md:text-base max-w-xl">{current.desc}</p>
           <Link
             href={current.link}
-            className="bg-white text-blue-700 px-8 py-3 rounded-lg shadow font-semibold hover:bg-gray-100 transition"
+            className="bg-white text-blue-700 px-5 py-2 rounded-md shadow font-medium hover:bg-gray-100 transition text-sm md:text-base"
           >
             {current.cta}
           </Link>
         </motion.div>
 
+        {/* Navigation Arrows */}
         <button
           type="button"
           aria-label="Previous slide"
           onClick={prevSlide}
-          className="absolute left-4 top-1/2 -translate-y-1/2 z-30 bg-black/50 text-white p-3 rounded-full hover:bg-black/70 transition"
+          className="absolute left-3 top-1/2 -translate-y-1/2 z-30 bg-black/40 text-white p-2 rounded-full hover:bg-black/60 transition"
         >
           ‹
         </button>
@@ -94,20 +92,20 @@ export default function HeroSection() {
           type="button"
           aria-label="Next slide"
           onClick={nextSlide}
-          className="absolute right-4 top-1/2 -translate-y-1/2 z-30 bg-black/50 text-white p-3 rounded-full hover:bg-black/70 transition"
+          className="absolute right-3 top-1/2 -translate-y-1/2 z-30 bg-black/40 text-white p-2 rounded-full hover:bg-black/60 transition"
         >
           ›
         </button>
       </div>
 
       {/* Dots */}
-      <div className="mt-4 flex justify-center gap-2">
+      <div className="mt-3 flex justify-center gap-2">
         {heroBanners.map((_, i) => (
           <button
             key={i}
             type="button"
             onClick={() => setIndex(i)}
-            className={`h-3 w-3 rounded-full ${
+            className={`h-2.5 w-2.5 rounded-full ${
               i === index ? "bg-blue-600" : "bg-gray-300"
             }`}
             aria-label={`Go to slide ${i + 1}`}
