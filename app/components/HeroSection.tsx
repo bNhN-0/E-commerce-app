@@ -43,7 +43,7 @@ export default function HeroSection() {
 
   return (
     <section className="relative mb-8">
-      <div className="relative h-[260px] md:h-[340px] max-w-4xl mx-auto overflow-hidden rounded-lg shadow-md">
+      <div className="relative h-[260px] md:h-[340px] max-w-5xl mx-auto overflow-hidden rounded-lg shadow-md">
         {/* Background Image */}
         <AnimatePresence mode="wait">
           <motion.img
@@ -59,7 +59,7 @@ export default function HeroSection() {
         </AnimatePresence>
 
         {/* Dark overlay */}
-        <div className="absolute inset-0 bg-black/40 pointer-events-none" />
+        <div className="absolute inset-0 bg-black/30 pointer-events-none" />
 
         {/* Text & CTA */}
         <motion.div

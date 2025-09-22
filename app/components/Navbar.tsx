@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
+import { usePathname } from "next/navigation"; // 👈 to highlight active link
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "@/lib/supabaseClient";
 import { assets } from "@/assets/assets";
@@ -10,6 +11,7 @@ import { assets } from "@/assets/assets";
 export default function Navbar() {
   const [user, setUser] = useState<any>(null);
   const [isOpen, setIsOpen] = useState(false);
+  const pathname = usePathname();
 
   // Auth state
   useEffect(() => {
@@ -28,32 +30,45 @@ export default function Navbar() {
 
   const toggleMenu = () => setIsOpen(!isOpen);
 
-  // Common nav links
+  // nav links
   const baseLinks = [
     { href: "/", label: "Home" },
     { href: "/products", label: "Products" },
     { href: "/cart", label: "Cart" },
     { href: "/orders", label: "Orders" },
-    { href: "/admin/products", label: "Admin Dashboard" },
+    { href: "/admin/products", label: "Admin" },
   ];
 
   return (
-    <nav className="bg-[#092029]/80 backdrop-blur-md fixed w-full z-50 shadow-lg">
-      <div className="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
+    <nav className="bg-[#091752]/90 backdrop-blur-md fixed w-full z-50 shadow-md">
+      <div className="max-w-7xl mx-auto px-6 h-16 flex justify-between items-center">
         {/* Logo */}
-        <div className="flex items-center text-white font-extrabold tracking-wide px-2 ">
-          <Image src={assets.logo} alt="Logo" width={60} height={60} />
+        <div className="flex items-center">
+          <Image
+            src={assets.logo}
+            alt="Logo"
+            width={48}
+            height={48}
+            className="mr-2"
+          />
         </div>
 
         {/* Desktop Links */}
-        <div className="hidden md:flex space-x-6 text-white items-center">
+        <div className="hidden md:flex space-x-6 items-center text-white">
           {baseLinks.map((link) => (
             <Link
               key={link.href}
               href={link.href}
-              className="hover:text-teal-400 transition"
+              className={`relative transition ${
+                pathname === link.href
+                  ? "text-teal-400 font-semibold"
+                  : "hover:text-teal-300"
+              }`}
             >
               {link.label}
+              {pathname === link.href && (
+                <span className="absolute -bottom-1 left-0 w-full h-0.5 bg-teal-400 rounded"></span>
+              )}
             </Link>
           ))}
 
@@ -61,14 +76,14 @@ export default function Navbar() {
           {!user ? (
             <Link
               href="/auth"
-              className="bg-blue-600 px-3 py-1 rounded hover:bg-blue-700"
+              className="bg-blue-600 px-4 py-2 rounded-md hover:bg-blue-700 transition"
             >
               Login / Signup
             </Link>
           ) : (
             <Link
               href="/account"
-              className="bg-purple-600 px-3 py-1 rounded hover:bg-purple-700"
+              className="bg-purple-600 px-4 py-2 rounded-md hover:bg-purple-700 transition"
             >
               Account
             </Link>
@@ -103,13 +118,17 @@ export default function Navbar() {
             animate={{ height: "auto", opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
             transition={{ duration: 0.3 }}
-            className="bg-[#1a1035]/95 px-6 pb-6 flex flex-col items-center space-y-6 shadow-lg rounded-b-2xl md:hidden"
+            className="bg-[#1a1035]/95 px-6 pb-6 flex flex-col items-center space-y-6 shadow-lg md:hidden"
           >
             {baseLinks.map((link) => (
               <Link
                 key={link.href}
                 href={link.href}
-                className="text-white hover:text-purple-400 transition text-lg"
+                className={`transition text-lg ${
+                  pathname === link.href
+                    ? "text-teal-400 font-semibold"
+                    : "text-white hover:text-teal-300"
+                }`}
                 onClick={() => setIsOpen(false)}
               >
                 {link.label}
@@ -120,7 +139,7 @@ export default function Navbar() {
             {!user ? (
               <Link
                 href="/auth"
-                className="bg-blue-600 px-4 py-2 rounded hover:bg-blue-700 w-full text-center"
+                className="bg-blue-600 px-5 py-2 rounded-md hover:bg-blue-700 w-full text-center transition"
                 onClick={() => setIsOpen(false)}
               >
                 Login / Signup
@@ -128,7 +147,7 @@ export default function Navbar() {
             ) : (
               <Link
                 href="/account"
-                className="bg-purple-600 px-4 py-2 rounded hover:bg-purple-700 w-full text-center"
+                className="bg-purple-600 px-5 py-2 rounded-md hover:bg-purple-700 w-full text-center transition"
                 onClick={() => setIsOpen(false)}
               >
                 Account
