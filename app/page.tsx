@@ -5,7 +5,7 @@ import HomePage from "./pages/Home";
 
 export default function Home() {
   return (
-    <div className="flex flex-col w-full min-h-screen bg-[#6892b499] text-white overflow-x-hidden">
+    <div className="flex flex-col w-full min-h-screen bg-[#bdcdfb] text-white overflow-x-hidden">
 
       <main className="flex-1 w-full overflow-y-auto scroll-smooth snap-y snap-mandatory">
         {/* Header Section */}

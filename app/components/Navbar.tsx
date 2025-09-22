@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { usePathname } from "next/navigation"; // 👈 to highlight active link
+import { useRouter, usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "@/lib/supabaseClient";
 import { assets } from "@/assets/assets";
@@ -11,49 +11,53 @@ import { assets } from "@/assets/assets";
 export default function Navbar() {
   const [user, setUser] = useState<any>(null);
   const [isOpen, setIsOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const router = useRouter();
   const pathname = usePathname();
 
   // Auth state
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setUser(data.user));
-
     const { data: listener } = supabase.auth.onAuthStateChange(
       (_event, session) => {
         setUser(session?.user ?? null);
       }
     );
-
-    return () => {
-      listener?.subscription.unsubscribe();
-    };
+    return () => listener?.subscription.unsubscribe();
   }, []);
 
-  const toggleMenu = () => setIsOpen(!isOpen);
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (search.trim()) {
+      router.push(`/products?search=${encodeURIComponent(search)}`);
+      setIsOpen(false);
+      setSearch("");
+    }
+  };
 
-  // nav links
   const baseLinks = [
     { href: "/", label: "Home" },
     { href: "/products", label: "Products" },
     { href: "/cart", label: "Cart" },
     { href: "/orders", label: "Orders" },
-    { href: "/admin/products", label: "Admin" },
   ];
 
   return (
-    <nav className="bg-[#091752]/90 backdrop-blur-md fixed w-full z-50 shadow-md">
+    <nav className="bg-[#404bb3]/90 backdrop-blur-md fixed w-full z-50 shadow-md">
       <div className="max-w-7xl mx-auto px-6 h-16 flex justify-between items-center">
         {/* Logo */}
-        <div className="flex items-center">
+        <div className="flex flex-col items-center">
           <Image
             src={assets.logo}
-            alt="Logo"
-            width={48}
-            height={48}
-            className="mr-2"
+            alt="Mingala Mart Logo"
+            width={35}
+            height={35}
+            className="mb-1"
           />
+          <span className="text-white text-xs font-medium">Mingala Mart</span>
         </div>
 
-        {/* Desktop Links */}
+        {/* Desktop Links + Search */}
         <div className="hidden md:flex space-x-6 items-center text-white">
           {baseLinks.map((link) => (
             <Link
@@ -72,28 +76,45 @@ export default function Navbar() {
             </Link>
           ))}
 
+          {/* Search Bar */}
+          <form onSubmit={handleSearch} className="flex items-center">
+            <input
+              type="text"
+              placeholder="Search products..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="px-3 py-1 rounded-l bg-white text-black text-sm focus:outline-none"
+            />
+            <button
+              type="submit"
+              className="bg-blue-600 hover:bg-blue-700 px-3 py-1 rounded-r text-sm"
+            >
+              🔍
+            </button>
+          </form>
+
           {/* Auth toggle */}
           {!user ? (
             <Link
               href="/auth"
-              className="bg-blue-600 px-4 py-2 rounded-md hover:bg-blue-700 transition"
+              className="bg-blue-600 px-3 py-1 rounded hover:bg-blue-700"
             >
               Login / Signup
             </Link>
           ) : (
             <Link
               href="/account"
-              className="bg-purple-600 px-4 py-2 rounded-md hover:bg-purple-700 transition"
+              className="bg-purple-600 px-3 py-1 rounded hover:bg-purple-700"
             >
               Account
             </Link>
           )}
         </div>
 
-        {/* Hamburger Menu (Mobile) */}
+        {/* Mobile Hamburger */}
         <div
           className="flex flex-col space-y-1 cursor-pointer md:hidden"
-          onClick={toggleMenu}
+          onClick={() => setIsOpen(!isOpen)}
         >
           <motion.span
             animate={isOpen ? { rotate: 45, y: 6 } : { rotate: 0, y: 0 }}
@@ -110,7 +131,7 @@ export default function Navbar() {
         </div>
       </div>
 
-      {/* Dropdown Menu (Mobile) */}
+      {/* Mobile Dropdown */}
       <AnimatePresence>
         {isOpen && (
           <motion.div
@@ -135,11 +156,28 @@ export default function Navbar() {
               </Link>
             ))}
 
+            {/* Search in mobile */}
+            <form onSubmit={handleSearch} className="flex w-full">
+              <input
+                type="text"
+                placeholder="Search products..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="flex-1 px-3 py-2 rounded-l bg-white text-black text-sm focus:outline-none"
+              />
+              <button
+                type="submit"
+                className="bg-blue-600 hover:bg-blue-700 px-3 py-2 rounded-r text-sm"
+              >
+                🔍
+              </button>
+            </form>
+
             {/* Auth toggle */}
             {!user ? (
               <Link
                 href="/auth"
-                className="bg-blue-600 px-5 py-2 rounded-md hover:bg-blue-700 w-full text-center transition"
+                className="bg-blue-600 px-4 py-2 rounded-md hover:bg-blue-700 w-full text-center transition"
                 onClick={() => setIsOpen(false)}
               >
                 Login / Signup
@@ -147,7 +185,7 @@ export default function Navbar() {
             ) : (
               <Link
                 href="/account"
-                className="bg-purple-600 px-5 py-2 rounded-md hover:bg-purple-700 w-full text-center transition"
+                className="bg-purple-600 px-4 py-2 rounded-md hover:bg-purple-700 w-full text-center transition"
                 onClick={() => setIsOpen(false)}
               >
                 Account

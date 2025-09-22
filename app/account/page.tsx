@@ -47,6 +47,13 @@ export default function AccountPage() {
         >
           ⚙️ Settings
         </Link>
+
+         <Link
+          href="/admin/products"
+          className="p-4 border rounded shadow hover:bg-gray-50"
+        >
+          ⚙️ Admin
+        </Link>
       </div>
 
       {/* Logout button */}

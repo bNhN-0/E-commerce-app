@@ -41,7 +41,7 @@ export default function AdminProductsPage() {
     const res = await fetch(`/api/products/${id}`, { method: "DELETE" });
 
     if (res.ok) {
-      setProducts(products.filter((p) => p.id !== id)); // update UI
+      setProducts(products.filter((p) => p.id !== id));
       alert(" Product deleted");
     } else {
       const error = await res.json();

@@ -7,17 +7,38 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const page = searchParams.get("page");
     const limit = searchParams.get("limit");
-    const category = searchParams.get("category"); // ✅ new: category filter
+    const category = searchParams.get("category"); //  filter by category
+    const search = searchParams.get("search");     // new: search filter
 
     // build where clause
     const where: any = {};
+
+    // category filter
     if (category) {
       where.category = {
         name: {
           equals: category,
-          mode: "insensitive", // case-insensitive match
+          mode: "insensitive",
         },
       };
+    }
+
+    // search filter
+    if (search) {
+      where.OR = [
+        {
+          name: {
+            contains: search,
+            mode: "insensitive",
+          },
+        },
+        {
+          description: {
+            contains: search,
+            mode: "insensitive",
+          },
+        },
+      ];
     }
 
     if (page && limit) {
@@ -30,7 +51,7 @@ export async function GET(req: Request) {
         prisma.product.findMany({
           skip,
           take: limitNum,
-          where, //  filter applied
+          where, //  apply category + search
           select: {
             id: true,
             name: true,
@@ -42,7 +63,7 @@ export async function GET(req: Request) {
           },
           orderBy: { createdAt: "desc" },
         }),
-        prisma.product.count({ where }), //  count with filter
+        prisma.product.count({ where }),
       ]);
 
       return NextResponse.json({
@@ -57,7 +78,7 @@ export async function GET(req: Request) {
     } else {
       // --- Flat Array Response ---
       const products = await prisma.product.findMany({
-        where, //  filter applied
+        where,
         select: {
           id: true,
           name: true,
