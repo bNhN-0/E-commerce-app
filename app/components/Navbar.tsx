@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { useRouter, usePathname } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "@/lib/supabaseClient";
 import { assets } from "@/assets/assets";
@@ -11,39 +11,25 @@ import { assets } from "@/assets/assets";
 export default function Navbar() {
   const [user, setUser] = useState<any>(null);
   const [isOpen, setIsOpen] = useState(false);
-  const [search, setSearch] = useState("");
-  const router = useRouter();
   const pathname = usePathname();
 
   // Auth state
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setUser(data.user));
     const { data: listener } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
-        setUser(session?.user ?? null);
-      }
+      (_event, session) => setUser(session?.user ?? null)
     );
     return () => listener?.subscription.unsubscribe();
   }, []);
 
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (search.trim()) {
-      router.push(`/products?search=${encodeURIComponent(search)}`);
-      setIsOpen(false);
-      setSearch("");
-    }
-  };
-
   const baseLinks = [
     { href: "/", label: "Home" },
     { href: "/products", label: "Products" },
-    { href: "/cart", label: "Cart" },
     { href: "/orders", label: "Orders" },
   ];
 
   return (
-    <nav className="bg-[#404bb3]/90 backdrop-blur-md fixed w-full z-50 shadow-md">
+    <nav className="bg-[#404BB3]/90 backdrop-blur-md fixed w-full z-50 shadow-md">
       <div className="max-w-7xl mx-auto px-6 h-16 flex justify-between items-center">
         {/* Logo */}
         <div className="flex flex-col items-center">
@@ -57,7 +43,7 @@ export default function Navbar() {
           <span className="text-white text-xs font-medium">Mingala Mart</span>
         </div>
 
-        {/* Desktop Links + Search */}
+        {/* Desktop Links */}
         <div className="hidden md:flex space-x-6 items-center text-white">
           {baseLinks.map((link) => (
             <Link
@@ -75,23 +61,6 @@ export default function Navbar() {
               )}
             </Link>
           ))}
-
-          {/* Search Bar */}
-          <form onSubmit={handleSearch} className="flex items-center">
-            <input
-              type="text"
-              placeholder="Search products..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="px-3 py-1 rounded-l bg-white text-black text-sm focus:outline-none"
-            />
-            <button
-              type="submit"
-              className="bg-blue-600 hover:bg-blue-700 px-3 py-1 rounded-r text-sm"
-            >
-              🔍
-            </button>
-          </form>
 
           {/* Auth toggle */}
           {!user ? (
@@ -155,23 +124,6 @@ export default function Navbar() {
                 {link.label}
               </Link>
             ))}
-
-            {/* Search in mobile */}
-            <form onSubmit={handleSearch} className="flex w-full">
-              <input
-                type="text"
-                placeholder="Search products..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="flex-1 px-3 py-2 rounded-l bg-white text-black text-sm focus:outline-none"
-              />
-              <button
-                type="submit"
-                className="bg-blue-600 hover:bg-blue-700 px-3 py-2 rounded-r text-sm"
-              >
-                🔍
-              </button>
-            </form>
 
             {/* Auth toggle */}
             {!user ? (

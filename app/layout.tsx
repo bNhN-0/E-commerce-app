@@ -1,8 +1,9 @@
 import Navbar from "../app/components/Navbar";
+import Searchbar from "../app/components/SearchBar"; 
+
 import "./globals.css";
 import type { Metadata } from "next";
 import { Outfit as OutfitFont, Ovo as OvoFont, Epilogue as EpilogueFont } from "next/font/google";
-import "./globals.css";
 
 const outfit = OutfitFont({
   subsets: ["latin"],
@@ -19,11 +20,11 @@ const epilogue = EpilogueFont({
   weight: ["400"],
 });
 
-export const metadata : Metadata  = {
+export const metadata: Metadata = {
   title: "E-commerce template",
   description: "Next.js + Supabase E-Commerce App",
-     icons: {
-    icon: "/favicon.ico", 
+  icons: {
+    icon: "/favicon.ico",
   },
 };
 
@@ -34,8 +35,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body>
+      <body className={`${outfit.className}`}>
         <Navbar />
+        <Searchbar />
         <main>{children}</main>
       </body>
     </html>
