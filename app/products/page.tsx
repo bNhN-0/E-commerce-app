@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import { useCart } from "../components/CartContext";
 
 type Product = {
   id: number;
@@ -29,6 +30,8 @@ export default function ProductsPage() {
   const searchParams = useSearchParams();
   const category = searchParams.get("category");
   const search = searchParams.get("search") || "";
+
+  const { refreshCart } = useCart(); 
 
   const fetchProducts = async (page = 1) => {
     setLoading(true);
@@ -60,6 +63,22 @@ export default function ProductsPage() {
   useEffect(() => {
     fetchProducts();
   }, [category, search]);
+
+  const handleAddToCart = async (productId: number) => {
+    try {
+      const res = await fetch("/api/cart/add", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ productId, quantity: 1 }),
+      });
+
+      if (!res.ok) throw new Error("Failed to add to cart");
+
+      refreshCart();
+    } catch (err) {
+      alert(" Could not add to cart");
+    }
+  };
 
   if (loading)
     return (
@@ -99,8 +118,11 @@ export default function ProductsPage() {
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
           {products.map((p) => (
-            <Link key={p.id} href={`/products/${p.id}`}>
-              <div className="group border rounded-2xl shadow hover:shadow-xl transition overflow-hidden bg-white cursor-pointer">
+            <div
+              key={p.id}
+              className="group border rounded-2xl shadow hover:shadow-xl transition overflow-hidden bg-white cursor-pointer"
+            >
+              <Link href={`/products/${p.id}`}>
                 {p.imageUrl ? (
                   <img
                     src={p.imageUrl}
@@ -113,21 +135,29 @@ export default function ProductsPage() {
                     No Image
                   </div>
                 )}
+              </Link>
 
-                <div className="p-4">
-                  <h2 className="font-semibold text-lg truncate">{p.name}</h2>
-                  <p className="text-gray-600 text-sm line-clamp-2 mb-2">
-                    {p.description}
-                  </p>
-                  <div className="flex justify-between items-center">
-                    <span className="font-bold text-blue-600">${p.price}</span>
-                    <span className="text-xs text-gray-500">
-                      Stock: {p.stock}
-                    </span>
-                  </div>
+              <div className="p-4">
+                <h2 className="font-semibold text-lg truncate">{p.name}</h2>
+                <p className="text-gray-600 text-sm line-clamp-2 mb-2">
+                  {p.description}
+                </p>
+                <div className="flex justify-between items-center mb-3">
+                  <span className="font-bold text-blue-600">${p.price}</span>
+                  <span className="text-xs text-gray-500">
+                    Stock: {p.stock}
+                  </span>
                 </div>
+
+                {/*  Add to Cart button */}
+                <button
+                  onClick={() => handleAddToCart(p.id)}
+                  className="w-full bg-orange-500 hover:bg-orange-600 text-white py-2 rounded-lg transition"
+                >
+                  🛒 Add to Cart
+                </button>
               </div>
-            </Link>
+            </div>
           ))}
         </div>
       )}

@@ -1,6 +1,6 @@
 import Navbar from "../app/components/Navbar";
 import Searchbar from "../app/components/SearchBar"; 
-
+import {CartProvider} from "../app/components/CartContext"; 
 import "./globals.css";
 import type { Metadata } from "next";
 import { Outfit as OutfitFont, Ovo as OvoFont, Epilogue as EpilogueFont } from "next/font/google";
@@ -36,9 +36,11 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${outfit.className}`}>
-        <Navbar />
-        <Searchbar />
-        <main>{children}</main>
+        <CartProvider>
+          <Navbar />
+          <Searchbar />
+          <main>{children}</main>
+        </CartProvider>
       </body>
     </html>
   );

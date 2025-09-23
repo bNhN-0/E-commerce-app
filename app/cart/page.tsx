@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useCart } from "../components/CartContext";
 
 type CartItem = {
   id: number;
@@ -19,6 +20,8 @@ export default function CartPage() {
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 
+  const { refreshCart, setCartCount } = useCart(); // use global cart state
+
   useEffect(() => {
     fetch("/api/cart")
       .then((res) => res.json())
@@ -26,10 +29,10 @@ export default function CartPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  // debounce timer (global per component)
   let timer: NodeJS.Timeout;
 
   const updateQuantity = (productId: number, newQty: number) => {
+    // update local UI instantly
     setCart((prev) => ({
       ...prev,
       items: prev.items
@@ -38,10 +41,10 @@ export default function CartPage() {
             ? { ...item, quantity: newQty }
             : item
         )
-        .filter((item) => item.quantity > 0), // remove if quantity = 0
+        .filter((item) => item.quantity > 0),
     }));
 
-    // Debounce API call
+    // debounce API call
     clearTimeout(timer);
     timer = setTimeout(async () => {
       const res = await fetch("/api/cart/update", {
@@ -51,22 +54,27 @@ export default function CartPage() {
       });
 
       if (!res.ok) {
-        alert("❌ Failed to update cart, refreshing...");
+        alert(" Failed to update cart, refreshing...");
         const data = await fetch("/api/cart").then((r) => r.json());
         setCart(data);
       }
-    }, 400); 
+
+      // update global cart count after change
+      refreshCart();
+    }, 400);
   };
 
   const handleCheckout = async () => {
     const res = await fetch("/api/orders", { method: "POST" });
 
     if (res.ok) {
-      alert("✅ Order placed!");
-      router.push("/orders"); // redirect to orders page
+      alert(" Order placed!");
+      setCart({ items: [] }); // clear local cart
+      setCartCount(0); // reset global cart instantly
+      router.push("/orders");
     } else {
       const error = await res.json();
-      alert(`❌ ${error.error}`);
+      alert(` ${error.error}`);
     }
   };
 
