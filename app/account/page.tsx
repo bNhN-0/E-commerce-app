@@ -9,7 +9,7 @@ export default function AccountPage() {
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
-    router.push("/auth"); // redirect back to login/signup
+    router.push("/auth"); 
   };
 
   return (

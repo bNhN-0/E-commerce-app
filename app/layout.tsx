@@ -1,5 +1,4 @@
 import Navbar from "../app/components/Navbar";
-import Searchbar from "../app/components/SearchBar"; 
 import {CartProvider} from "../app/components/CartContext"; 
 import "./globals.css";
 import type { Metadata } from "next";
@@ -38,7 +37,6 @@ export default function RootLayout({
       <body className={`${outfit.className}`}>
         <CartProvider>
           <Navbar />
-          <Searchbar />
           <main>{children}</main>
         </CartProvider>
       </body>

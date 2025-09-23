@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { supabase } from "@/lib/supabaseClient";
 import { useCart } from "../components/CartContext";
 
 type CartItem = {
@@ -20,14 +21,36 @@ export default function CartPage() {
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 
-  const { refreshCart, setCartCount } = useCart(); // use global cart state
+  const { refreshCart, setCartCount } = useCart();
 
   useEffect(() => {
-    fetch("/api/cart")
-      .then((res) => res.json())
-      .then((data) => setCart(data))
-      .finally(() => setLoading(false));
-  }, []);
+    const fetchCart = async () => {
+      // check user
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) {
+        router.push("/auth"); 
+        return;
+      }
+
+      try {
+        const res = await fetch("/api/cart", { cache: "no-store" });
+        if (!res.ok) throw new Error("Failed to fetch cart");
+
+        const data = await res.json();
+        setCart(data || { items: [] });
+      } catch (err) {
+        console.error("Error fetching cart:", err);
+        setCart({ items: [] });
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchCart();
+  }, [router]);
 
   let timer: NodeJS.Timeout;
 
@@ -59,7 +82,6 @@ export default function CartPage() {
         setCart(data);
       }
 
-      // update global cart count after change
       refreshCart();
     }, 400);
   };
@@ -69,8 +91,8 @@ export default function CartPage() {
 
     if (res.ok) {
       alert(" Order placed!");
-      setCart({ items: [] }); // clear local cart
-      setCartCount(0); // reset global cart instantly
+      setCart({ items: [] });
+      setCartCount(0); 
       router.push("/orders");
     } else {
       const error = await res.json();

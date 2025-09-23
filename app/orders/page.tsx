@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { supabase } from "@/lib/supabaseClient";
 
 type Order = {
   id: number;
@@ -17,13 +19,37 @@ type Order = {
 export default function OrdersPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
+  const router = useRouter();
 
   useEffect(() => {
-    fetch("/api/orders")
-      .then((res) => res.json())
-      .then((data) => setOrders(data))
-      .finally(() => setLoading(false));
-  }, []);
+    const fetchOrders = async () => {
+      // check user
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
+      if (!user) {
+        router.push("/auth"); // redirect to login if not logged in
+        return;
+      }
+
+      try {
+        const res = await fetch("/api/orders", { cache: "no-store" });
+        if (!res.ok) throw new Error("Failed to fetch orders");
+
+        const data = await res.json();
+
+        setOrders(Array.isArray(data) ? data : data.orders || []);
+      } catch (err) {
+        console.error("Error loading orders:", err);
+        setOrders([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchOrders();
+  }, [router]);
 
   if (loading) return <p className="p-4">Loading orders...</p>;
 
