@@ -22,9 +22,9 @@ const FeaturesLayout = () => {
 
   return (
     <section className="container mx-auto px-4 py-12">
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-10 items-start">
+      <div className="flex gap-8 items-start">
         {/* Left side - Featured Products */}
-        <div className="md:col-span-2">
+        <div className="flex-1">
           <h2 className="text-3xl font-semibold mb-6 text-center md:text-left">
             Featured Products
           </h2>
@@ -66,7 +66,7 @@ const FeaturesLayout = () => {
         </div>
 
         {/* Right side - Featured Categories */}
-        <div className="bg-white shadow rounded-lg p-6">
+        <div className="bg-white rounded-2xl shadow p-4 md:w-48">
           <FeaturesCard />
         </div>
       </div>

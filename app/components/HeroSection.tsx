@@ -44,7 +44,6 @@ export default function HeroSection() {
   return (
     <section className="relative mb-8">
       <div className="relative h-[260px] md:h-[340px] max-w-5xl mx-auto overflow-hidden rounded-lg shadow-md">
-        {/* Background Image */}
         <AnimatePresence mode="wait">
           <motion.img
             key={`bg-${current.id}`}
@@ -60,8 +59,6 @@ export default function HeroSection() {
 
         {/* Dark overlay */}
         <div className="absolute inset-0 bg-black/30 pointer-events-none" />
-
-        {/* Text & CTA */}
         <motion.div
           key={`content-${current.id}`}
           className="relative z-10 flex h-full flex-col items-center justify-center px-4 text-center text-white"
@@ -79,7 +76,7 @@ export default function HeroSection() {
           </Link>
         </motion.div>
 
-        {/* Navigation Arrows */}
+        {/* Navigation  */}
         <button
           type="button"
           aria-label="Previous slide"
@@ -98,7 +95,6 @@ export default function HeroSection() {
         </button>
       </div>
 
-      {/* Dots */}
       <div className="mt-3 flex justify-center gap-2">
         {heroBanners.map((_, i) => (
           <button

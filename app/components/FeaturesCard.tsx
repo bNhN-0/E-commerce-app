@@ -1,37 +1,47 @@
 import React from "react";
+import Link from "next/link";
+import Image from "next/image";
+import { assets } from "@/assets/assets";
 
 const FeaturesCard = () => {
   const categories = [
-    { icon: "👕", name: "Fashion" },
-    { icon: "💻", name: "Electronics" },
-    { icon: "🏠", name: "Home & Living" },
-    { icon: "💄", name: "Beauty & Health" },
-    { icon: "⚽", name: "Sports & Outdoors" },
+    { icon: assets.fashion_icon, name: "Fashion", link: "/products?category=FASHION" },
+    { icon: assets.electronics_icon, name: "Electronics", link: "/products?category=ELECTRONICS" },
+    { icon: assets.home_icon, name: "Home", link: "/products?category=HOME_LIVING" },
+    { icon: assets.beauty_icon, name: "Beauty", link: "/products?category=BEAUTY_HEALTH" },
+    { icon: assets.sports_icon, name: "Sports", link: "/products?category=SPORTS_OUTDOORS" },
   ];
 
   return (
-    <section>
-      <h2 className="text-2xl font-semibold mb-6 text-center">
-        Featured Categories
+    <aside className="w-40">
+      <h2 className="text-sm font-semibold mb-3 text-center text-gray-800">
+        Categories
       </h2>
-      <div className="grid grid-cols-3 sm:grid-cols-3 md:grid-cols-2 lg:grid-cols-3 gap-6 justify-items-center">
+      <div className="grid grid-cols-2 gap-4 justify-items-center">
         {categories.map((cat) => (
-          <div
+          <Link
             key={cat.name}
+            href={cat.link}
             className="flex flex-col items-center cursor-pointer group"
           >
-            {/* Circle wrapper */}
-            <div className="w-20 h-20 flex items-center justify-center rounded-full bg-gradient-to-br from-gray-100 to-gray-200 shadow-md group-hover:shadow-lg group-hover:scale-105 transition">
-              <span className="text-3xl">{cat.icon}</span>
+            {/* Circle with smaller Image */}
+            <div className="w-12 h-12 flex items-center justify-center rounded-full bg-gray-100 group-hover:bg-gray-200 group-hover:scale-105 transition overflow-hidden">
+              <Image
+                src={cat.icon}
+                alt={cat.name}
+                width={20}   // smaller than before
+                height={20}
+                className="object-contain"
+              />
             </div>
             {/* Label */}
-            <p className="mt-3 text-sm font-medium text-gray-700 group-hover:text-gray-900">
+            <p className="mt-1 text-[11px] font-medium text-gray-600 group-hover:text-gray-900 text-center leading-tight">
               {cat.name}
             </p>
-          </div>
+          </Link>
         ))}
       </div>
-    </section>
+    </aside>
   );
 };
 
