@@ -45,7 +45,7 @@ export default function Navbar() {
 
         {/* Links */}
         <div className="hidden md:flex items-center space-x-4 text-white text-xl">
-          <Link href="/">🏠</Link>
+          <Link href="/"> <Image src={assets.home_icon} alt="Home" width={24} height={24} /></Link>
           <Link href="/products">🛍️</Link>
           <Link href="/orders">📦</Link>
           <Link href="/cart" className="relative">
