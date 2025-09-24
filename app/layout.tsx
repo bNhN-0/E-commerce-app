@@ -33,11 +33,13 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
+      <html lang="en">
       <body className={`${outfit.className} h-full text-gray-900`}>
         <CartProvider>
           <Navbar />
-          <main >{children}</main>
+          <main>{children}</main>
         </CartProvider>
       </body>
+    </html>
   );
 }

@@ -8,6 +8,10 @@ import fashion from "./icons/icons8-hanger-50.png"
 import sports from "./icons/icons8-sneakers-60.png"
 import beauty from "./icons/icons8-lipstick-60.png"
 import welcome from "./media/welcome_banner.png"
+import shopping from "./icons/icons8-shopping-bag-50.png"
+import cart from "./icons/icons8-add-shopping-cart-50.png"
+import profile from "./icons/icons8-profile-48.png"
+import product from "./icons/icons8-open-parcel-50.png"
 
 export const assets = {
   logo: logo_image,
@@ -20,6 +24,10 @@ export const assets = {
   sports_icon : sports,
   beauty_icon : beauty,
   welcome_banner : welcome,
+  shopping_icon : shopping,
+  cart_icon : cart,
+  profile_icon : profile,
+  product_icon : product,
 
 };
 

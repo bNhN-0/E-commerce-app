@@ -7,7 +7,7 @@ const FeaturesCard = () => {
   const categories = [
     { icon: assets.fashion_icon, name: "Fashion", link: "/products?category=FASHION" },
     { icon: assets.electronics_icon, name: "Electronics", link: "/products?category=ELECTRONICS" },
-    { icon: assets.home_icon, name: "Home", link: "/products?category=HOME_LIVING" },
+    { icon: assets.home_icon, name: "Home Appliance", link: "/products?category=HOME_LIVING" },
     { icon: assets.beauty_icon, name: "Beauty", link: "/products?category=BEAUTY_HEALTH" },
     { icon: assets.sports_icon, name: "Sports", link: "/products?category=SPORTS_OUTDOORS" },
   ];
@@ -24,7 +24,6 @@ const FeaturesCard = () => {
             href={cat.link}
             className="flex flex-col items-center cursor-pointer group"
           >
-            {/* Circle with smaller Image */}
             <div className="w-12 h-12 flex items-center justify-center rounded-full bg-gray-100 group-hover:bg-gray-200 group-hover:scale-105 transition overflow-hidden">
               <Image
                 src={cat.icon}
@@ -34,7 +33,6 @@ const FeaturesCard = () => {
                 className="object-contain"
               />
             </div>
-            {/* Label */}
             <p className="mt-1 text-[11px] font-medium text-gray-600 group-hover:text-gray-900 text-center leading-tight">
               {cat.name}
             </p>
