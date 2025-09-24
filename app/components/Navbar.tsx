@@ -7,7 +7,7 @@ import { usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { supabase } from "@/lib/supabaseClient";
 import { assets } from "@/assets/assets";
-import { useCart } from "./CartContext"; 
+import { useCart } from "./CartContext";
 import Searchbar from "./SearchBar";
 
 export default function Navbar() {
@@ -26,8 +26,9 @@ export default function Navbar() {
   }, []);
 
   return (
-    <nav className="bg-[#404BB3]/40 backdrop-blur-md fixed top-4 left-1/2 transform -translate-x-1/2 w-[95%] z-50 shadow-md rounded-2xl">
-      <div className="max-w-7xl mx-auto px-6 h-16 flex justify-between items-center">
+    <nav className="bg-[#404BB3]/60 backdrop-blur-md fixed top-0 left-0 right-0 w-full z-50 shadow-md">
+        <div className="w-full px-8 h-20 flex justify-between items-center">
+
         {/* Logo */}
         <div className="flex flex-col items-center">
           <Image
@@ -40,12 +41,14 @@ export default function Navbar() {
           <span className="text-white text-xs font-medium">Mingala Mart</span>
         </div>
 
-        {/*  Search Bar  */}
-        <Searchbar></Searchbar>
+        {/* Search Bar */}
+        <Searchbar />
 
         {/* Links */}
         <div className="hidden md:flex items-center space-x-4 text-white text-xl">
-          <Link href="/"><Image src={assets.home_icon} alt="Home" width={24} height={24} /></Link>
+          <Link href="/">
+            <Image src={assets.home_icon} alt="Home" width={24} height={24} />
+          </Link>
           <Link href="/products">🛍️</Link>
           <Link href="/orders">📦</Link>
           <Link href="/cart" className="relative">
@@ -57,7 +60,7 @@ export default function Navbar() {
             )}
           </Link>
 
-          {/*  Auth toggle */}
+          {/* Auth toggle */}
           {!user ? (
             <Link href="/auth">🔑</Link>
           ) : (
@@ -95,9 +98,15 @@ export default function Navbar() {
             transition={{ duration: 0.3 }}
             className="bg-[#1a1035]/95 px-6 pb-6 flex flex-col items-center space-y-6 shadow-lg md:hidden rounded-b-2xl text-2xl"
           >
-            <Link href="/" onClick={() => setIsOpen(false)}>🏠</Link>
-            <Link href="/products" onClick={() => setIsOpen(false)}>🛍️</Link>
-            <Link href="/orders" onClick={() => setIsOpen(false)}>📦</Link>
+            <Link href="/" onClick={() => setIsOpen(false)}>
+              🏠
+            </Link>
+            <Link href="/products" onClick={() => setIsOpen(false)}>
+              🛍️
+            </Link>
+            <Link href="/orders" onClick={() => setIsOpen(false)}>
+              📦
+            </Link>
             <Link href="/cart" onClick={() => setIsOpen(false)} className="relative">
               🛒
               {cartCount > 0 && (
@@ -107,11 +116,15 @@ export default function Navbar() {
               )}
             </Link>
 
-            {/*  Auth toggle */}
+            {/* Auth toggle */}
             {!user ? (
-              <Link href="/auth" onClick={() => setIsOpen(false)}>🔑</Link>
+              <Link href="/auth" onClick={() => setIsOpen(false)}>
+                🔑
+              </Link>
             ) : (
-              <Link href="/account" onClick={() => setIsOpen(false)}>👤</Link>
+              <Link href="/account" onClick={() => setIsOpen(false)}>
+                👤
+              </Link>
             )}
           </motion.div>
         )}

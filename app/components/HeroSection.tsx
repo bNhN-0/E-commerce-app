@@ -6,8 +6,17 @@ import { motion, AnimatePresence } from "framer-motion";
 import { assets } from "@/assets/assets";
 
 const heroBanners = [
+
   {
     id: 1,
+    title: "Welcome to Mingala Mart",
+    desc: "Your one-stop shop for fashion, beauty, sports, and tech essentials.",
+    cta: "🛍 Shop now !",
+    link: "/products",
+    image: assets.welcome_banner,
+  },
+  {
+    id: 2,
     title: "Shop Smarter, Dress Better",
     desc: "Discover exclusive deals on fashion – style starts here at Mingala Mart.",
     cta: "🛍 Browse Products",
@@ -15,7 +24,7 @@ const heroBanners = [
     image: assets.fashion_banner,
   },
   {
-    id: 2,
+    id: 3,
     title: "New Arrivals Just Dropped",
     desc: "Check out the latest fashion trends and must-have gadgets.",
     cta: "✨ Explore Now",
@@ -23,7 +32,7 @@ const heroBanners = [
     image: assets.electronic_banner,
   },
   {
-    id: 3,
+    id: 4,
     title: "Big Savings Await You",
     desc: "Get discounts up to 50% on selected categories!",
     cta: "💸 Grab Deals",
@@ -58,7 +67,7 @@ export default function HeroSection() {
         </AnimatePresence>
 
         {/* Dark overlay */}
-        <div className="absolute inset-0 bg-black/30 pointer-events-none" />
+        <div className="absolute inset-0 bg-black/10 pointer-events-none" />
         <motion.div
           key={`content-${current.id}`}
           className="relative z-10 flex h-full flex-col items-center justify-center px-4 text-center text-white"

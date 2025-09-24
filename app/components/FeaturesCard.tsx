@@ -13,7 +13,7 @@ const FeaturesCard = () => {
   ];
 
   return (
-    <aside className="w-40">
+    <aside className="bg-white shadow-md rounded-xl p-4 w-44">
       <h2 className="text-sm font-semibold mb-3 text-center text-gray-800">
         Categories
       </h2>
@@ -29,7 +29,7 @@ const FeaturesCard = () => {
               <Image
                 src={cat.icon}
                 alt={cat.name}
-                width={20}   // smaller than before
+                width={20}
                 height={20}
                 className="object-contain"
               />
