@@ -7,7 +7,10 @@ export async function POST(req: Request) {
     const user = await getUserSession();
     if (!user) return NextResponse.json({ error: "Not logged in" }, { status: 401 });
 
-    const { productId, quantity } = await req.json();
+    const { productId, variantId, quantity } = await req.json();
+    if (!productId || !quantity) {
+      return NextResponse.json({ error: "ProductId and quantity are required" }, { status: 400 });
+    }
 
     // Ensure cart exists
     let cart = await prisma.cart.findFirst({ where: { userId: user.id } });
@@ -15,9 +18,15 @@ export async function POST(req: Request) {
       cart = await prisma.cart.create({ data: { userId: user.id } });
     }
 
-    // Check if product is already in cart
-    const existingItem = await prisma.cartItem.findFirst({
-      where: { cartId: cart.id, productId },
+    // Try to find existing item (matching product + variant)
+    const existingItem = await prisma.cartItem.findUnique({
+      where: {
+        cartId_productId_variantId: {
+          cartId: cart.id,
+          productId,
+          variantId: variantId ?? null, // must be explicit, since composite key includes variantId
+        },
+      },
     });
 
     if (existingItem) {
@@ -27,7 +36,12 @@ export async function POST(req: Request) {
       });
     } else {
       await prisma.cartItem.create({
-        data: { cartId: cart.id, productId, quantity },
+        data: {
+          cartId: cart.id,
+          productId,
+          variantId: variantId ?? null,
+          quantity,
+        },
       });
     }
 

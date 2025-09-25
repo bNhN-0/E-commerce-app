@@ -5,6 +5,20 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useCart } from "../components/CartContext";
 
+type Attribute = {
+  id: number;
+  name: string;
+  value: string;
+};
+
+type Variant = {
+  id: number;
+  sku: string;
+  price: number;
+  stock: number;
+  attributes: Attribute[];
+};
+
 type Product = {
   id: number;
   name: string;
@@ -12,6 +26,7 @@ type Product = {
   price: number;
   stock: number;
   imageUrl?: string;
+  variants: Variant[];
 };
 
 type Pagination = {
@@ -31,7 +46,7 @@ export default function ProductsPage() {
   const category = searchParams.get("category");
   const search = searchParams.get("search") || "";
 
-  const { refreshCart } = useCart(); 
+  const { refreshCart } = useCart();
 
   const fetchProducts = async (page = 1) => {
     setLoading(true);
@@ -148,6 +163,26 @@ export default function ProductsPage() {
                     Stock: {p.stock}
                   </span>
                 </div>
+
+                {/* Variants preview */}
+                {p.variants && p.variants.length > 0 && (
+                  <div className="mb-3">
+                    <p className="text-xs text-gray-500 mb-1">Variants:</p>
+                    <div className="flex flex-wrap gap-2">
+                      {p.variants.map((v) => (
+                        <div
+                          key={v.id}
+                          className="border px-2 py-1 rounded text-xs bg-gray-50"
+                        >
+                          {v.attributes
+                            .map((a) => `${a.name}: ${a.value}`)
+                            .join(", ")}
+                          {v.price ? ` - $${v.price}` : ""}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {/*  Add to Cart button */}
                 <button

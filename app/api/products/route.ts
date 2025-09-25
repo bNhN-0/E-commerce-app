@@ -7,42 +7,25 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const page = searchParams.get("page");
     const limit = searchParams.get("limit");
-    const category = searchParams.get("category"); //  filter by category
-    const search = searchParams.get("search");     // new: search filter
+    const category = searchParams.get("category");
+    const search = searchParams.get("search");
 
-    // build where clause
     const where: any = {};
 
-    // category filter
     if (category) {
       where.category = {
-        name: {
-          equals: category,
-          mode: "insensitive",
-        },
+        name: { equals: category, mode: "insensitive" },
       };
     }
 
-    // search filter
     if (search) {
       where.OR = [
-        {
-          name: {
-            contains: search,
-            mode: "insensitive",
-          },
-        },
-        {
-          description: {
-            contains: search,
-            mode: "insensitive",
-          },
-        },
+        { name: { contains: search, mode: "insensitive" } },
+        { description: { contains: search, mode: "insensitive" } },
       ];
     }
 
     if (page && limit) {
-      // --- Paginated Response ---
       const pageNum = parseInt(page) || 1;
       const limitNum = parseInt(limit) || 12;
       const skip = (pageNum - 1) * limitNum;
@@ -51,15 +34,10 @@ export async function GET(req: Request) {
         prisma.product.findMany({
           skip,
           take: limitNum,
-          where, //  apply category + search
-          select: {
-            id: true,
-            name: true,
-            description: true,
-            price: true,
-            stock: true,
-            imageUrl: true,
+          where,
+          include: {
             category: { select: { id: true, name: true, type: true } },
+            variants: { include: { attributes: true } }, // ✅ now included
           },
           orderBy: { createdAt: "desc" },
         }),
@@ -76,17 +54,11 @@ export async function GET(req: Request) {
         },
       });
     } else {
-      // --- Flat Array Response ---
       const products = await prisma.product.findMany({
         where,
-        select: {
-          id: true,
-          name: true,
-          description: true,
-          price: true,
-          stock: true,
-          imageUrl: true,
+        include: {
           category: { select: { id: true, name: true, type: true } },
+          variants: { include: { attributes: true } }, 
         },
         orderBy: { createdAt: "desc" },
       });
@@ -110,7 +82,7 @@ export async function POST(req: Request) {
     if (user.role !== "ADMIN") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
     const body = await req.json();
-    const { name, description, price, stock, imageUrl, categoryId } = body;
+    const { name, description, price, stock, imageUrl, categoryId, variants } = body;
 
     if (!categoryId) {
       return NextResponse.json({ error: "Category is required" }, { status: 400 });
@@ -122,14 +94,32 @@ export async function POST(req: Request) {
     }
 
     const newProduct = await prisma.product.create({
-      data: { name, description, price, stock, imageUrl, categoryId },
-      select: {
-        id: true,
-        name: true,
-        price: true,
-        stock: true,
-        imageUrl: true,
+      data: {
+        name,
+        description,
+        price,
+        stock,
+        imageUrl,
+        categoryId,
+        variants: variants?.length
+          ? {
+              create: variants.map((v: any) => ({
+                sku: v.sku,
+                price: v.price,
+                stock: v.stock,
+                attributes: {
+                  create: v.attributes?.map((a: any) => ({
+                    name: a.name,
+                    value: a.value,
+                  })) || [],
+                },
+              })),
+            }
+          : undefined,
+      },
+      include: {
         category: { select: { id: true, name: true, type: true } },
+        variants: { include: { attributes: true } },
       },
     });
 

@@ -9,7 +9,11 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
     }
 
-    const { productId, quantity } = await req.json();
+    const { productId, variantId, quantity } = await req.json();
+
+    if (!productId) {
+      return NextResponse.json({ error: "Product ID required" }, { status: 400 });
+    }
 
     // ensure cart exists
     let cart = await prisma.cart.findFirst({ where: { userId: user.id } });
@@ -17,14 +21,14 @@ export async function POST(req: Request) {
       cart = await prisma.cart.create({ data: { userId: user.id } });
     }
 
-    // find existing cart item
+    // find existing cart item by product + variant
     const existingItem = await prisma.cartItem.findFirst({
-      where: { cartId: cart.id, productId },
+      where: { cartId: cart.id, productId, variantId: variantId ?? null },
     });
 
     if (existingItem) {
       if (quantity <= 0) {
-        // remove if zero
+        // remove item
         await prisma.cartItem.delete({ where: { id: existingItem.id } });
       } else {
         // update quantity
@@ -34,9 +38,9 @@ export async function POST(req: Request) {
         });
       }
     } else if (quantity > 0) {
-      // create new cart item if not exists
+      // create new item
       await prisma.cartItem.create({
-        data: { cartId: cart.id, productId, quantity },
+        data: { cartId: cart.id, productId, variantId, quantity },
       });
     }
 

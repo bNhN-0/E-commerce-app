@@ -9,6 +9,13 @@ type Category = {
   type: string;
 };
 
+type Variant = {
+  sku: string;
+  price: string;
+  stock: string;
+  attributes: { name: string; value: string }[];
+};
+
 export default function AddProductPage() {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -18,6 +25,10 @@ export default function AddProductPage() {
   const [previewUrl, setPreviewUrl] = useState("");
   const [categoryId, setCategoryId] = useState("");
   const [categories, setCategories] = useState<Category[]>([]);
+  const [variants, setVariants] = useState<Variant[]>([
+    { sku: "", price: "", stock: "", attributes: [] },
+  ]);
+
   const router = useRouter();
 
   useEffect(() => {
@@ -46,7 +57,7 @@ export default function AddProductPage() {
 
     let uploadedUrl = "";
     if (imageFile) {
-      // For demo: preview only. Replace with real upload (Supabase, S3, etc.)
+      // TODO: replace with real upload (Supabase/S3/etc.)
       uploadedUrl = previewUrl;
     }
 
@@ -60,6 +71,12 @@ export default function AddProductPage() {
         stock: parseInt(stock),
         imageUrl: uploadedUrl,
         categoryId: parseInt(categoryId),
+        variants: variants.map((v) => ({
+          sku: v.sku,
+          price: parseFloat(v.price),
+          stock: parseInt(v.stock),
+          attributes: v.attributes,
+        })),
       }),
     });
 
@@ -74,6 +91,7 @@ export default function AddProductPage() {
 
   return (
     <div className="p-6">
+      {/* Header */}
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold text-gray-800">➕ Add New Product</h1>
         <button
@@ -183,12 +201,129 @@ export default function AddProductPage() {
           </select>
         </div>
 
+        {/* Variants */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Variants
+          </label>
+
+          {variants.map((v, idx) => (
+            <div
+              key={idx}
+              className="border p-4 rounded-lg mb-3 bg-gray-50 shadow-sm"
+            >
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <input
+                  placeholder="SKU"
+                  value={v.sku}
+                  onChange={(e) => {
+                    const updated = [...variants];
+                    updated[idx].sku = e.target.value;
+                    setVariants(updated);
+                  }}
+                  className="border px-3 py-2 rounded"
+                  required
+                />
+                <input
+                  type="number"
+                  step="0.01"
+                  placeholder="Price"
+                  value={v.price}
+                  onChange={(e) => {
+                    const updated = [...variants];
+                    updated[idx].price = e.target.value;
+                    setVariants(updated);
+                  }}
+                  className="border px-3 py-2 rounded"
+                />
+                <input
+                  type="number"
+                  placeholder="Stock"
+                  value={v.stock}
+                  onChange={(e) => {
+                    const updated = [...variants];
+                    updated[idx].stock = e.target.value;
+                    setVariants(updated);
+                  }}
+                  className="border px-3 py-2 rounded"
+                />
+              </div>
+
+              {/* Attributes */}
+              <div className="mt-3">
+                <label className="block text-xs text-gray-600 mb-1">
+                  Attributes
+                </label>
+                {v.attributes.map((a, aIdx) => (
+                  <div key={aIdx} className="flex gap-2 mb-2">
+                    <input
+                      placeholder="Name (e.g. Color)"
+                      value={a.name}
+                      onChange={(e) => {
+                        const updated = [...variants];
+                        updated[idx].attributes[aIdx].name = e.target.value;
+                        setVariants(updated);
+                      }}
+                      className="border px-2 py-1 rounded flex-1"
+                    />
+                    <input
+                      placeholder="Value (e.g. Red)"
+                      value={a.value}
+                      onChange={(e) => {
+                        const updated = [...variants];
+                        updated[idx].attributes[aIdx].value = e.target.value;
+                        setVariants(updated);
+                      }}
+                      className="border px-2 py-1 rounded flex-1"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const updated = [...variants];
+                        updated[idx].attributes.splice(aIdx, 1);
+                        setVariants(updated);
+                      }}
+                      className="text-red-500"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const updated = [...variants];
+                    updated[idx].attributes.push({ name: "", value: "" });
+                    setVariants(updated);
+                  }}
+                  className="text-blue-600 text-sm mt-1"
+                >
+                  + Add Attribute
+                </button>
+              </div>
+            </div>
+          ))}
+
+          <button
+            type="button"
+            onClick={() =>
+              setVariants([
+                ...variants,
+                { sku: "", price: "", stock: "", attributes: [] },
+              ])
+            }
+            className="text-green-600 text-sm"
+          >
+            + Add Variant
+          </button>
+        </div>
+
         {/* Submit */}
         <button
           type="submit"
           className="bg-green-600 text-white px-5 py-2.5 rounded-lg hover:bg-green-700 transition"
         >
-           Add Product
+          Add Product
         </button>
       </form>
     </div>

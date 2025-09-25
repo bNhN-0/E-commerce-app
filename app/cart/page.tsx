@@ -14,6 +14,12 @@ type CartItem = {
     price: number;
     imageUrl?: string;
   };
+  variant?: {
+    id: number;
+    sku: string;
+    price?: number;
+    attributes: { id: number; name: string; value: string }[];
+  } | null;
 };
 
 export default function CartPage() {
@@ -25,13 +31,12 @@ export default function CartPage() {
 
   useEffect(() => {
     const fetchCart = async () => {
-      // check user
       const {
         data: { user },
       } = await supabase.auth.getUser();
 
       if (!user) {
-        router.push("/auth"); 
+        router.push("/auth");
         return;
       }
 
@@ -54,26 +59,28 @@ export default function CartPage() {
 
   let timer: NodeJS.Timeout;
 
-  const updateQuantity = (productId: number, newQty: number) => {
-    // update local UI instantly
+  const updateQuantity = (
+    productId: number,
+    variantId: number | null,
+    newQty: number
+  ) => {
     setCart((prev) => ({
       ...prev,
       items: prev.items
         .map((item) =>
-          item.product.id === productId
+          item.product.id === productId && item.variant?.id === variantId
             ? { ...item, quantity: newQty }
             : item
         )
         .filter((item) => item.quantity > 0),
     }));
 
-    // debounce API call
     clearTimeout(timer);
     timer = setTimeout(async () => {
       const res = await fetch("/api/cart/update", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ productId, quantity: newQty }),
+        body: JSON.stringify({ productId, variantId, quantity: newQty }),
       });
 
       if (!res.ok) {
@@ -92,7 +99,7 @@ export default function CartPage() {
     if (res.ok) {
       alert(" Order placed!");
       setCart({ items: [] });
-      setCartCount(0); 
+      setCartCount(0);
       router.push("/orders");
     } else {
       const error = await res.json();
@@ -103,7 +110,10 @@ export default function CartPage() {
   if (loading) return <p className="p-4">Loading cart...</p>;
 
   const total = cart.items.reduce(
-    (sum, item) => sum + item.quantity * item.product.price,
+    (sum, item) =>
+      sum +
+      item.quantity *
+        (item.variant?.price ?? item.product.price), 
     0
   );
 
@@ -130,14 +140,30 @@ export default function CartPage() {
                 )}
                 <div>
                   <p className="font-semibold">{item.product.name}</p>
-                  <p>${item.product.price}</p>
+                  {item.variant && (
+                    <p className="text-sm text-gray-600">
+                      {item.variant.attributes
+                        .map((a) => `${a.name}: ${a.value}`)
+                        .join(", ")}
+                    </p>
+                  )}
+                  <p>
+                    $
+                    {item.variant?.price != null
+                      ? item.variant.price
+                      : item.product.price}
+                  </p>
                 </div>
               </div>
 
               <div className="flex items-center gap-2">
                 <button
                   onClick={() =>
-                    updateQuantity(item.product.id, item.quantity - 1)
+                    updateQuantity(
+                      item.product.id,
+                      item.variant?.id ?? null,
+                      item.quantity - 1
+                    )
                   }
                   className="px-2 py-1 bg-gray-300 rounded"
                 >
@@ -146,7 +172,11 @@ export default function CartPage() {
                 <span>{item.quantity}</span>
                 <button
                   onClick={() =>
-                    updateQuantity(item.product.id, item.quantity + 1)
+                    updateQuantity(
+                      item.product.id,
+                      item.variant?.id ?? null,
+                      item.quantity + 1
+                    )
                   }
                   className="px-2 py-1 bg-gray-300 rounded"
                 >
@@ -156,7 +186,6 @@ export default function CartPage() {
             </div>
           ))}
 
-          {/* Total + Checkout */}
           <div className="flex justify-between font-bold text-lg mt-4">
             <span>Total:</span>
             <span>${total}</span>

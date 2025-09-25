@@ -3,30 +3,31 @@ import { prisma } from "@/lib/prisma";
 import { getUserSession } from "@/lib/auth";
 
 // GET one product (public)
-export async function GET(
-  _: Request,
-  ctx: { params: Promise<{ id: string }> } // params is Promise
-) {
-  const { id } = await ctx.params; // unwrap first
+export async function GET(_: Request, ctx: { params: Promise<{ id: string }> }) {
+  const { id } = await ctx.params;
   try {
     const product = await prisma.product.findUnique({
       where: { id: parseInt(id) },
-      include: { category: true },
+      include: {
+        category: true,
+        variants: { include: { attributes: true } },
+      },
     });
 
-    if (!product) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    if (!product)
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
     return NextResponse.json(product);
   } catch (error) {
     console.error("Failed to fetch product:", error);
-    return NextResponse.json({ error: "Failed to fetch product" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Failed to fetch product" },
+      { status: 500 }
+    );
   }
 }
 
 // UPDATE product (ADMIN only)
-export async function PUT(
-  req: Request,
-  ctx: { params: Promise<{ id: string }> }
-) {
+export async function PUT(req: Request, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
 
   try {
@@ -35,9 +36,10 @@ export async function PUT(
     if (user.role !== "ADMIN") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
     const body = await req.json();
-    const { name, description, price, stock, imageUrl, categoryId } = body;
+    const { name, description, price, stock, imageUrl, categoryId, variants } = body;
 
-    const updated = await prisma.product.update({
+    // update base product
+    await prisma.product.update({
       where: { id: parseInt(id) },
       data: {
         name,
@@ -45,12 +47,72 @@ export async function PUT(
         price,
         stock,
         imageUrl,
-        ...(categoryId ? { categoryId } : {}), //  update directly by categoryId
+        ...(categoryId ? { categoryId } : {}),
       },
-      include: { category: true },
     });
 
-    return NextResponse.json(updated);
+    // handle variants + attributes
+    if (Array.isArray(variants)) {
+      for (const v of variants) {
+        if (v.id) {
+          // Update variant
+          await prisma.productVariant.update({
+            where: { id: v.id },
+            data: {
+              sku: v.sku,
+              price: v.price,
+              stock: v.stock,
+            },
+          });
+
+          if (Array.isArray(v.attributes)) {
+            for (const a of v.attributes) {
+              if (a._delete && a.id) {
+                await prisma.variantAttribute.delete({ where: { id: a.id } });
+              } else if (a.id) {
+                await prisma.variantAttribute.update({
+                  where: { id: a.id },
+                  data: { name: a.name, value: a.value },
+                });
+              } else if (!a._delete) {
+                await prisma.variantAttribute.create({
+                  data: {
+                    variantId: v.id,
+                    name: a.name,
+                    value: a.value,
+                  },
+                });
+              }
+            }
+          }
+        } else {
+          // New variant
+          await prisma.productVariant.create({
+            data: {
+              productId: parseInt(id),
+              sku: v.sku,
+              price: v.price,
+              stock: v.stock,
+              attributes: {
+                create: v.attributes
+                  ?.filter((a: any) => !a._delete)
+                  .map((a: any) => ({ name: a.name, value: a.value })) || [],
+              },
+            },
+          });
+        }
+      }
+    }
+
+    const refreshed = await prisma.product.findUnique({
+      where: { id: parseInt(id) },
+      include: {
+        category: true,
+        variants: { include: { attributes: true } },
+      },
+    });
+
+    return NextResponse.json(refreshed);
   } catch (error) {
     console.error("Failed to update product:", error);
     return NextResponse.json({ error: "Failed to update product" }, { status: 500 });
@@ -58,10 +120,7 @@ export async function PUT(
 }
 
 // DELETE product (ADMIN only)
-export async function DELETE(
-  _: Request,
-  ctx: { params: Promise<{ id: string }> }
-) {
+export async function DELETE(_: Request, ctx: { params: Promise<{ id: string }> }) {
   const { id } = await ctx.params;
 
   try {
@@ -69,9 +128,8 @@ export async function DELETE(
     if (!user) return NextResponse.json({ error: "Not logged in" }, { status: 401 });
     if (user.role !== "ADMIN") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
-    await prisma.product.delete({
-      where: { id: parseInt(id) },
-    });
+    await prisma.productVariant.deleteMany({ where: { productId: parseInt(id) } });
+    await prisma.product.delete({ where: { id: parseInt(id) } });
 
     return NextResponse.json({ message: "Deleted successfully" });
   } catch (error) {
@@ -79,15 +137,3 @@ export async function DELETE(
     return NextResponse.json({ error: "Failed to delete product" }, { status: 500 });
   }
 }
-
-// GET one product
-/*
-
-//export async function GET(request: Request, context: { params: ... }) {}
-
-*/
-// GET one product
-
-  // params comes from the [id] in the URL
-  // Example: /api/products/123 → params = { id: "123" }
-  //params act as a bucket 
