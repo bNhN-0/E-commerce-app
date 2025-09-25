@@ -23,10 +23,7 @@ const FeaturesLayout = () => {
 
   return (
     <section className="container mx-auto px-4 py-10">
- 
-      {/* Featured Products */}
       <div className="max-w-7xl mx-auto ml-20 grid grid-cols-1 lg:grid-cols-4 gap-10 items-start">
-        {/* Featured Products */}
         <div className="lg:col-span-3">
           <h2 className="text-3xl font-bold mb-8 text-center text-gray-900">
             Featured Products
@@ -37,43 +34,48 @@ const FeaturesLayout = () => {
           ) : products.length === 0 ? (
             <p className="text-center text-gray-500">No products available.</p>
           ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-6 justify-items-center">
+            <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-6">
               {products.slice(0, 8).map((p) => (
                 <div
                   key={p.id}
-                  className="bg-white border rounded-xl shadow-sm hover:shadow-lg hover:-translate-y-1 transition-transform duration-200 flex flex-col w-full max-w-xs"
+                  className="group relative w-full max-w-xs bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-xl transition-all duration-300 overflow-hidden"
                 >
-                  {/* Product Image */}
-                  <Link href={`/products/${p.id}`} className="block">
+                  <Link href={`/products/${p.id}`} className="block relative">
                     {p.imageUrl ? (
                       <img
                         src={p.imageUrl}
                         alt={p.name}
-                        className="w-full aspect-[4/3] object-cover rounded-t-xl"
+                        className="w-full aspect-[4/3] object-cover rounded-t-2xl group-hover:scale-105 transition-transform duration-300"
                       />
                     ) : (
-                      <div className="w-full aspect-[4/3] bg-gray-200 flex items-center justify-center rounded-t-xl">
-                        <span className="text-gray-500">No Image</span>
+                      <div className="w-full aspect-[4/3] bg-gray-100 flex items-center justify-center text-gray-400 text-sm">
+                        No Image
                       </div>
                     )}
+
+                    {/* overlay */}
+                    <div className="absolute inset-0 bg-black/5 opacity-0 group-hover:opacity-100 transition"></div>
                   </Link>
 
                   {/* Product Info */}
-                  <div className="p-4 flex flex-col flex-1">
-                    <h3 className="font-semibold text-base text-gray-900 truncate mb-1">
+                  <div className="p-4 flex flex-col">
+                    <h3 className="font-medium text-sm text-gray-800 truncate group-hover:text-blue-600 transition mb-1">
                       {p.name}
                     </h3>
-                    <p className="text-blue-600 font-bold mb-4">${p.price}</p>
+                    <p className="text-lg font-semibold text-gray-900 mb-3">
+                      ${p.price}
+                    </p>
 
-                    <div className="mt-auto flex gap-2">
+                    {/* Buttons */}
+                    <div className="flex gap-2 mt-auto">
                       <Link
                         href={`/products/${p.id}`}
-                        className="flex-1 bg-gray-100 text-gray-900 px-3 py-2 rounded-lg text-center text-sm hover:bg-gray-200 transition"
+                        className="flex-1 text-center rounded-xl border border-gray-200 bg-gray-50 text-gray-700 text-sm py-2 hover:bg-gray-100 transition"
                       >
                         Details
                       </Link>
-                      <button className="flex-1 bg-blue-600 text-white px-3 py-2 rounded-lg text-sm hover:bg-blue-700 transition">
-                        Add to Cart
+                      <button className="flex-1 text-center rounded-xl bg-blue-600 text-white text-sm py-2 hover:bg-blue-700 transition">
+                        Add
                       </button>
                     </div>
                   </div>

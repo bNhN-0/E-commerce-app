@@ -3,22 +3,21 @@
 import Footer from "../components/Footer";
 import FeaturesLayout from "../components/FeaturesLayout";
 import HeroSection from "../components/HeroSection";
+import PromoHighlights from "../components/PromoPage";
 
 export default function HomePage() {
   return (
     <main className="w-full">
-      {/* 🏠 Hero Section */}
-     
-        <HeroSection />
-    
+ 
+  
+      <HeroSection />
+  
 
-
-      {/* Featured Products + Categories */}
+  
       <div className="mb-16">
         <FeaturesLayout />
       </div>
 
-      {/* Features Row */}
       <section className="container mx-auto px-4 grid grid-cols-1 md:grid-cols-3 gap-6 mb-16">
         <div className="flex flex-col items-center p-6 bg-white/70 backdrop-blur-md rounded-xl shadow-sm hover:shadow-md transition text-center">
           🚚
