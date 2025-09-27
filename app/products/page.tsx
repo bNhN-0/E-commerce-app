@@ -65,8 +65,8 @@ const formatAttributes = (attrs: VariantAttributes): string => {
   if (Array.isArray(attrs)) {
     return attrs.map((a) => `${a.name}: ${a.value}`).join(", ");
   }
-  return Object.entries(attrs)
-    .map(([k, v]) => `${k}: ${String(v)}`)
+  return Object.entries(attrs as Record<string, unknown>)
+    .map(([k, v]: [string, unknown]) => `${k}: ${String(v)}`)
     .join(", ");
 };
 
