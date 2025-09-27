@@ -3,29 +3,26 @@ import { PrismaClient } from "@prisma/client";
 
 const make = (datasourceUrl?: string) =>
   new PrismaClient({
-    datasourceUrl,
-    log:
-      process.env.NODE_ENV === "development"
-        ? (["warn", "error"] as const)
-        : (["error"] as const),
+    ...(datasourceUrl ? { datasourceUrl } : {}),
+    log: process.env.NODE_ENV === "development" ? (["warn", "error"] as const) : (["error"] as const),
   });
 
-declare global {
-  // eslint-disable-next-line no-var
-  var prisma: PrismaClient | undefined;
-  // eslint-disable-next-line no-var
-  var prismaDirect: PrismaClient | undefined;
-}
+// Keep instances on globalThis to avoid re-creating in dev (HMR)
+type GlobalPrisma = {
+  prisma?: PrismaClient;
+  prismaDirect?: PrismaClient;
+};
+const globalForPrisma = globalThis as unknown as GlobalPrisma;
 
-// Pooled (PgBouncer)
+// Pooled (PgBouncer) — typical DATABASE_URL
 export const prisma =
-  global.prisma ?? make(process.env.DATABASE_URL);
+  globalForPrisma.prisma ?? make(process.env.DATABASE_URL);
 
-// Direct (primary)
+// Direct (primary) — use DIRECT_URL if present, otherwise fall back to DATABASE_URL
 export const prismaDirect =
-  global.prismaDirect ?? make(process.env.DIRECT_URL);
+  globalForPrisma.prismaDirect ?? make(process.env.DIRECT_URL ?? process.env.DATABASE_URL);
 
 if (process.env.NODE_ENV !== "production") {
-  global.prisma = prisma;
-  global.prismaDirect = prismaDirect;
+  globalForPrisma.prisma = prisma;
+  globalForPrisma.prismaDirect = prismaDirect;
 }

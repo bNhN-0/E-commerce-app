@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { useSearchParams } from "next/navigation";
 
 type VariantAttributes =
@@ -36,6 +37,11 @@ type Pagination = {
   totalPages: number;
 };
 
+type ProductsResponse = {
+  data: Product[];
+  pagination: Pagination;
+};
+
 export default function ProductsPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [pagination, setPagination] = useState<Pagination | null>(null);
@@ -46,11 +52,7 @@ export default function ProductsPage() {
   const category = searchParams.get("category") || undefined;
   const categoryId = searchParams.get("categoryId") || undefined;
   const search = searchParams.get("search") || undefined;
-  const sort = (searchParams.get("sort") || "new") as
-    | "new"
-    | "price_asc"
-    | "price_desc"
-    | "rating";
+  const sort = (searchParams.get("sort") || "new") as "new" | "price_asc" | "price_desc" | "rating";
 
   const formatAttributes = (attrs: VariantAttributes) => {
     if (!attrs) return "";
@@ -76,14 +78,14 @@ export default function ProductsPage() {
           ...(sort ? { sort } : {}),
         });
 
-        const res = await fetch(`/api/products?${query.toString()}`, {
-          cache: "no-store",
-        });
+        const res = await fetch(`/api/products?${query.toString()}`, { cache: "no-store" });
         if (!res.ok) throw new Error("Failed to fetch products");
 
-        const data = await res.json(); // { data, pagination }
-        setProducts(data.data || []);
-        setPagination(data.pagination || null);
+        const data: unknown = await res.json();
+        const parsed = (data as ProductsResponse) || { data: [], pagination: null as any };
+
+        setProducts(Array.isArray(parsed.data) ? parsed.data : []);
+        setPagination(parsed.pagination ?? null);
       } catch {
         setError("Could not load products. Please try again.");
       } finally {
@@ -94,7 +96,7 @@ export default function ProductsPage() {
   );
 
   useEffect(() => {
-    fetchProducts(1);
+    void fetchProducts(1);
   }, [fetchProducts]);
 
   if (loading)
@@ -131,11 +133,7 @@ export default function ProductsPage() {
       {products.length === 0 ? (
         <p className="text-center text-gray-500">
           No products found{" "}
-          {category
-            ? `in ${category}`
-            : categoryId
-            ? `in #${categoryId}`
-            : ""}{" "}
+          {category ? `in ${category}` : categoryId ? `in #${categoryId}` : ""}{" "}
           {search ? `for "${search}"` : ""}.
         </p>
       ) : (
@@ -146,56 +144,59 @@ export default function ProductsPage() {
               className="group border rounded-2xl shadow hover:shadow-xl transition overflow-hidden bg-white flex flex-col"
             >
               <Link href={`/products/${p.id}`} className="block">
-                {p.imageUrl ? (
-                  <img
-                    src={p.imageUrl}
-                    alt={p.name}
-                    className="w-full h-48 object-cover group-hover:scale-105 transition-transform duration-300"
-                    loading="lazy"
-                  />
-                ) : (
-                  <div className="w-full h-48 bg-gray-100 flex items-center justify-center text-gray-400">
-                    No Image
-                  </div>
-                )}
+                <div className="relative w-full h-48">
+                  {p.imageUrl ? (
+                    <Image
+                      src={p.imageUrl}
+                      alt={p.name}
+                      fill
+                      sizes="(max-width: 768px) 100vw, (max-width: 1024px) 33vw, 33vw"
+                      className="object-cover transition-transform duration-300 group-hover:scale-105"
+                      priority={false}
+                    />
+                  ) : (
+                    <div className="w-full h-full bg-gray-100 flex items-center justify-center text-gray-400">
+                      No Image
+                    </div>
+                  )}
+                </div>
               </Link>
 
               <div className="p-4 flex-1 flex flex-col">
                 <h2 className="font-semibold text-lg truncate">{p.name}</h2>
                 {p.description ? (
-                  <p className="text-gray-600 text-sm line-clamp-2 mb-2">
-                    {p.description}
-                  </p>
+                  <p className="text-gray-600 text-sm line-clamp-2 mb-2">{p.description}</p>
                 ) : null}
 
                 <span className="font-bold text-blue-600 mb-1 block">
                   ${p.price.toFixed(2)}
                 </span>
 
-                {/* Show variants preview */}
+                {/* Variants preview */}
                 {p.variants?.length > 0 && (
                   <div className="mb-3">
                     <p className="text-xs text-gray-500 mb-1">Variants:</p>
                     <div className="flex flex-wrap gap-2">
-                      {p.variants.map((v) => (
-                        <div
-                          key={v.id}
-                          className="border px-2 py-1 rounded text-xs bg-gray-50"
-                          title={formatAttributes(v.attributes)}
-                        >
-                          {formatAttributes(v.attributes)}
-                          {v.price != null ? ` - $${v.price}` : ""}
-                        </div>
-                      ))}
+                      {p.variants.map((v) => {
+                        const label = formatAttributes(v.attributes);
+                        return (
+                          <div
+                            key={v.id}
+                            className="border px-2 py-1 rounded text-xs bg-gray-50"
+                            title={label}
+                          >
+                            {label}
+                            {v.price != null ? ` - $${v.price}` : ""}
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 )}
 
                 {/* Stock message above button */}
                 {p.stock > 0 ? (
-                  <p className="text-sm text-red-500 mb-3">
-                    Only {p.stock} left in stock!
-                  </p>
+                  <p className="text-sm text-red-500 mb-3">Only {p.stock} left in stock!</p>
                 ) : (
                   <p className="text-sm text-gray-500 mb-3">Out of stock</p>
                 )}
