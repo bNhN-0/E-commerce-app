@@ -20,8 +20,8 @@ const epilogue = EpilogueFont({
 });
 
 export const metadata: Metadata = {
-  title: "E-commerce template",
-  description: "Next.js + Supabase E-Commerce App",
+  title: "Mingala Mart",
+  description: "Your one-stop shop for all things fashion, beauty, sports, and tech.",
   icons: {
     icon: "/favicon.ico",
   },
