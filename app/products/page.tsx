@@ -42,7 +42,7 @@ type ProductsResponse = {
   pagination: Pagination;
 };
 
-// ---- helpers (no any) ----
+// ---- helpers (strict, no any) ----
 const isPagination = (x: unknown): x is Pagination => {
   if (!x || typeof x !== "object") return false;
   const o = x as Record<string, unknown>;
@@ -60,6 +60,16 @@ const isProductsResponse = (x: unknown): x is ProductsResponse => {
   return Array.isArray(o.data) && isPagination(o.pagination);
 };
 
+const formatAttributes = (attrs: VariantAttributes): string => {
+  if (!attrs) return "";
+  if (Array.isArray(attrs)) {
+    return attrs.map((a) => `${a.name}: ${a.value}`).join(", ");
+  }
+  return Object.entries(attrs)
+    .map(([k, v]) => `${k}: ${String(v)}`)
+    .join(", ");
+};
+
 export default function ProductsPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [pagination, setPagination] = useState<Pagination | null>(null);
@@ -75,16 +85,6 @@ export default function ProductsPage() {
     | "price_asc"
     | "price_desc"
     | "rating";
-
-  const formatAttributes = (attrs: VariantAttributes) => {
-    if (!attrs) return "";
-    if (Array.isArray(attrs)) {
-      return attrs.map((a) => `${a.name}: ${a.value}`).join(", ");
-    }
-    return Object.entries(attrs)
-      .map(([k, v]) => `${k}: ${String(v)}`)
-      .join(", ");
-  };
 
   const fetchProducts = useCallback(
     async (page = 1) => {
@@ -167,7 +167,7 @@ export default function ProductsPage() {
         </p>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
-          {products.map((p) => (
+          {products.map((p: Product) => (
             <div
               key={p.id}
               className="group border rounded-2xl shadow hover:shadow-xl transition overflow-hidden bg-white flex flex-col"
@@ -182,6 +182,7 @@ export default function ProductsPage() {
                       sizes="(max-width: 768px) 100vw, (max-width: 1024px) 33vw, 33vw"
                       className="object-cover transition-transform duration-300 group-hover:scale-105"
                       priority={false}
+                      unoptimized
                     />
                   ) : (
                     <div className="w-full h-full bg-gray-100 flex items-center justify-center text-gray-400">
@@ -208,7 +209,7 @@ export default function ProductsPage() {
                   <div className="mb-3">
                     <p className="text-xs text-gray-500 mb-1">Variants:</p>
                     <div className="flex flex-wrap gap-2">
-                      {p.variants.map((v) => {
+                      {p.variants.map((v: Variant) => {
                         const label = formatAttributes(v.attributes);
                         return (
                           <div
@@ -225,7 +226,6 @@ export default function ProductsPage() {
                   </div>
                 )}
 
-                {/* Stock message above button */}
                 {p.stock > 0 ? (
                   <p className="text-sm text-red-500 mb-3">
                     Only {p.stock} left in stock!
@@ -235,7 +235,6 @@ export default function ProductsPage() {
                 )}
               </div>
 
-              {/* Shop It button as card footer */}
               <Link
                 href={`/products/${p.id}`}
                 className="block w-full bg-orange-500 hover:bg-orange-600 text-white text-center py-3 rounded-b-2xl transition font-medium"
