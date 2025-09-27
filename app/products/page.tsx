@@ -42,6 +42,24 @@ type ProductsResponse = {
   pagination: Pagination;
 };
 
+// ---- helpers (no any) ----
+const isPagination = (x: unknown): x is Pagination => {
+  if (!x || typeof x !== "object") return false;
+  const o = x as Record<string, unknown>;
+  return (
+    typeof o.page === "number" &&
+    typeof o.limit === "number" &&
+    typeof o.total === "number" &&
+    typeof o.totalPages === "number"
+  );
+};
+
+const isProductsResponse = (x: unknown): x is ProductsResponse => {
+  if (!x || typeof x !== "object") return false;
+  const o = x as Record<string, unknown>;
+  return Array.isArray(o.data) && isPagination(o.pagination);
+};
+
 export default function ProductsPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [pagination, setPagination] = useState<Pagination | null>(null);
@@ -52,7 +70,11 @@ export default function ProductsPage() {
   const category = searchParams.get("category") || undefined;
   const categoryId = searchParams.get("categoryId") || undefined;
   const search = searchParams.get("search") || undefined;
-  const sort = (searchParams.get("sort") || "new") as "new" | "price_asc" | "price_desc" | "rating";
+  const sort = (searchParams.get("sort") || "new") as
+    | "new"
+    | "price_asc"
+    | "price_desc"
+    | "rating";
 
   const formatAttributes = (attrs: VariantAttributes) => {
     if (!attrs) return "";
@@ -78,14 +100,21 @@ export default function ProductsPage() {
           ...(sort ? { sort } : {}),
         });
 
-        const res = await fetch(`/api/products?${query.toString()}`, { cache: "no-store" });
+        const res = await fetch(`/api/products?${query.toString()}`, {
+          cache: "no-store",
+        });
         if (!res.ok) throw new Error("Failed to fetch products");
 
         const data: unknown = await res.json();
-        const parsed = (data as ProductsResponse) || { data: [], pagination: null as any };
+        const parsed: ProductsResponse = isProductsResponse(data)
+          ? data
+          : {
+              data: [],
+              pagination: { page, limit: 12, total: 0, totalPages: 0 },
+            };
 
-        setProducts(Array.isArray(parsed.data) ? parsed.data : []);
-        setPagination(parsed.pagination ?? null);
+        setProducts(parsed.data);
+        setPagination(parsed.pagination);
       } catch {
         setError("Could not load products. Please try again.");
       } finally {
@@ -165,7 +194,9 @@ export default function ProductsPage() {
               <div className="p-4 flex-1 flex flex-col">
                 <h2 className="font-semibold text-lg truncate">{p.name}</h2>
                 {p.description ? (
-                  <p className="text-gray-600 text-sm line-clamp-2 mb-2">{p.description}</p>
+                  <p className="text-gray-600 text-sm line-clamp-2 mb-2">
+                    {p.description}
+                  </p>
                 ) : null}
 
                 <span className="font-bold text-blue-600 mb-1 block">
@@ -196,7 +227,9 @@ export default function ProductsPage() {
 
                 {/* Stock message above button */}
                 {p.stock > 0 ? (
-                  <p className="text-sm text-red-500 mb-3">Only {p.stock} left in stock!</p>
+                  <p className="text-sm text-red-500 mb-3">
+                    Only {p.stock} left in stock!
+                  </p>
                 ) : (
                   <p className="text-sm text-gray-500 mb-3">Out of stock</p>
                 )}
