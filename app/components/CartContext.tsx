@@ -1,16 +1,25 @@
 "use client";
 
-import { createContext, useContext, useState, useEffect, useCallback } from "react";
+import {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useCallback,
+  Dispatch,
+  SetStateAction,
+} from "react";
 
 type Totals = { totalItems?: number; totalAmount?: number };
 
-type CartContextType = {
+export type CartContextType = {
   cartCount: number;
+  setCartCount: Dispatch<SetStateAction<number>>;
   applyTotals: (totals?: Totals) => void;
   refreshCart: () => Promise<void>;
 };
 
-const CartContext = createContext<CartContextType | null>(null);
+const CartContext = createContext<CartContextType | undefined>(undefined);
 
 export function CartProvider({ children }: { children: React.ReactNode }) {
   const [cartCount, setCartCount] = useState(0);
@@ -29,10 +38,13 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
         return;
       }
       const data = await res.json();
+
       if (typeof data?.totalItems === "number") {
         setCartCount(data.totalItems);
       } else if (Array.isArray(data?.items)) {
         setCartCount(data.items.length);
+      } else if (Array.isArray(data?.data)) {
+        setCartCount(data.data.length);
       } else {
         setCartCount(0);
       }
@@ -47,7 +59,9 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   }, [refreshCart]);
 
   return (
-    <CartContext.Provider value={{ cartCount, applyTotals, refreshCart }}>
+    <CartContext.Provider
+      value={{ cartCount, setCartCount, applyTotals, refreshCart }}
+    >
       {children}
     </CartContext.Provider>
   );

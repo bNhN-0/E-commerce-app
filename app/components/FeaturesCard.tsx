@@ -5,35 +5,39 @@ import { assets } from "@/assets/assets";
 
 const FeaturesCard = () => {
   const categories = [
-    { icon: assets.fashion_icon, name: "Fashion", link: "/products?category=FASHION" },
-    { icon: assets.electronics_icon, name: "Electronics", link: "/products?category=ELECTRONICS" },
-    { icon: assets.home_icon, name: "Home Appliance", link: "/products?category=HOME_LIVING" },
-    { icon: assets.beauty_icon, name: "Beauty", link: "/products?category=BEAUTY_HEALTH" },
-    { icon: assets.sports_icon, name: "Sports", link: "/products?category=SPORTS_OUTDOORS" },
+    { icon: assets.fashion_icon, name: "Men's Fashion", link: "/products?category=Men's Fashion" },
+    { icon: assets.electronics_icon, name: "Electronics", link: "/products?category=Electronics" },
+    { icon: assets.home_icon, name: "Home Living", link: "/products?category=Home Living" },
+    { icon: assets.beauty_icon, name: "Beauty & Health", link: "/products?category=Beauty & Health" },
+    { icon: assets.sports_icon, name: "Sports & Outdoors", link: "/products?category=Sports & Outdoors" },
   ];
 
   return (
-    <aside className="bg-white shadow-md rounded-xl p-4 w-44">
-      <h2 className="text-sm font-semibold mb-3 text-center text-gray-800">
-        Categories
+    <aside className="bg-white/90 backdrop-blur-sm shadow-lg rounded-2xl p-5 w-52 border border-gray-100">
+      <h2 className="text-base font-semibold mb-4 text-gray-800 text-center">
+        🛍 Categories
       </h2>
-      <div className="grid grid-cols-2 gap-4 justify-items-center">
+
+      <div className="grid grid-cols-2 gap-5 justify-items-center">
         {categories.map((cat) => (
           <Link
             key={cat.name}
             href={cat.link}
             className="flex flex-col items-center cursor-pointer group"
           >
-            <div className="w-12 h-12 flex items-center justify-center rounded-full bg-gray-100 group-hover:bg-gray-200 group-hover:scale-105 transition overflow-hidden">
+            {/* Icon bubble */}
+            <div className="w-14 h-14 flex items-center justify-center rounded-full bg-gray-50 shadow-sm group-hover:shadow-md group-hover:bg-gradient-to-br group-hover:from-blue-50 group-hover:to-indigo-50 group-hover:scale-105 transition-all duration-200">
               <Image
                 src={cat.icon}
                 alt={cat.name}
-                width={20}
-                height={20}
+                width={26}
+                height={26}
                 className="object-contain"
               />
             </div>
-            <p className="mt-1 text-[11px] font-medium text-gray-600 group-hover:text-gray-900 text-center leading-tight">
+
+            {/* Label */}
+            <p className="mt-2 text-xs font-medium text-gray-600 group-hover:text-gray-900 text-center leading-tight">
               {cat.name}
             </p>
           </Link>

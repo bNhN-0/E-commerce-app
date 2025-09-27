@@ -104,8 +104,8 @@ model Product {
   @@index([name])
   @@index([categoryId])
   @@index([createdAt])
-  @@index([price])   // sort/filter by price fast
-  @@index([stock])   // in-stock filtering fast
+  @@index([price]) 
+  @@index([stock])  
 }
 
 model ProductVariant {
@@ -115,10 +115,7 @@ model ProductVariant {
   sku        String   @unique
   price      Float?
   stock      Int      @default(0)
-
-  // JSON keeps attributes flexible and avoids extra joins
   attributes Json
-
   createdAt  DateTime @default(now())
   CartItem   CartItem[]
 
@@ -207,7 +204,7 @@ model Order {
   items     OrderItem[]
   coupons   OrderCoupon[]
   payments  Payment[]
-  shipments Shipment[]    // allow split shipments
+  shipments Shipment[]   
   createdAt DateTime      @default(now())
 
   @@index([userId])
