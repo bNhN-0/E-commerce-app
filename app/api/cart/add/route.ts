@@ -1,12 +1,12 @@
 // app/api/cart/add/route.ts
 import { NextResponse } from 'next/server';
 import { prismaDirect } from '@/lib/prisma';
-import { getUserSession } from '@/lib/auth';
+import { getUserSessionLite } from '@/lib/auth-lite';
 
 export const runtime = 'nodejs';
 
 export async function POST(req: Request) {
-  const user = await getUserSession();
+  const user = await getUserSessionLite(); // ✅ now uses awaited cookies + @supabase/ssr
   if (!user) return NextResponse.json({ error: 'Not logged in' }, { status: 401 });
 
   try {
@@ -23,11 +23,19 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Invalid variantId' }, { status: 400 });
 
     const result = await prismaDirect.$transaction(async (tx) => {
-      // 1) ensure cart (cheap)
-      let cart = await tx.cart.findFirst({ where: { userId: user.id }, select: { id: true, totalItems: true, totalAmount: true } });
-      if (!cart) cart = await tx.cart.create({ data: { userId: user.id } });
+      // ensure cart
+      let cart = await tx.cart.findFirst({
+        where: { userId: user.id },
+        select: { id: true, totalItems: true, totalAmount: true },
+      });
+      if (!cart) {
+        cart = await tx.cart.create({
+          data: { userId: user.id },
+          select: { id: true, totalItems: true, totalAmount: true },
+        });
+      }
 
-      // 2) resolve unit price in 1 query (variant overrides product)
+      // resolve unit price
       let unitPrice: number;
       if (variantId !== null) {
         const v = await tx.productVariant.findFirst({
@@ -37,12 +45,15 @@ export async function POST(req: Request) {
         if (!v) throw new Error('VARIANT_NOT_FOUND');
         unitPrice = (v.price ?? v.product.price) ?? 0;
       } else {
-        const p = await tx.product.findUnique({ where: { id: productId }, select: { price: true } });
+        const p = await tx.product.findUnique({
+          where: { id: productId },
+          select: { price: true },
+        });
         if (!p) throw new Error('PRODUCT_NOT_FOUND');
         unitPrice = p.price ?? 0;
       }
 
-      // 3) upsert line with a read-then-create/update (null variantId prevents Prisma upsert)
+      // upsert line
       const existing = await tx.cartItem.findFirst({
         where: { cartId: cart.id, productId, variantId: variantId ?? null },
         select: { id: true, quantity: true },
@@ -68,8 +79,8 @@ export async function POST(req: Request) {
         newQuantity = created.quantity;
       }
 
-      // 4) update totals and return new totals directly (no full snapshot)
-      const updatedCart = await tx.cart.update({
+      // update totals
+      const totals = await tx.cart.update({
         where: { id: cart.id },
         data: {
           totalItems: { increment: qty },
@@ -80,8 +91,8 @@ export async function POST(req: Request) {
 
       return {
         ok: true,
-        line: { id: lineId, productId, variantId, quantity: newQuantity },
-        totals: updatedCart, // { id, totalItems, totalAmount }
+        line: { id: lineId, productId, variantId, quantity: newQuantity, unitPrice },
+        totals,
       };
     });
 

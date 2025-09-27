@@ -1,31 +1,31 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
+import { useCart } from "@/app/components/CartContext";
 
-type Attribute = {
-  id: number;
-  name: string;
-  value: string;
-};
+type VariantAttributes =
+  | Record<string, unknown>
+  | Array<{ name: string; value: string }>
+  | null;
 
 type Variant = {
   id: number;
   sku: string;
-  price?: number;
+  price?: number | null;
   stock: number;
-  attributes: Attribute[];
+  attributes?: VariantAttributes; // supports both shapes
 };
 
 type Product = {
   id: number;
   name: string;
-  description?: string;
+  description?: string | null;
   price: number;
   stock: number;
-  imageUrl?: string;
-  variants: Variant[];
+  imageUrl?: string | null;
+  variants?: Variant[];
 };
 
 export default function ProductDetailPage() {
@@ -34,28 +34,38 @@ export default function ProductDetailPage() {
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<any>(null);
   const [selectedVariant, setSelectedVariant] = useState<Variant | null>(null);
+  const [adding, setAdding] = useState(false);
+  const { setCartCount } = useCart();
 
-  //  get logged-in user
+  const money = useMemo(
+    () => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }),
+    []
+  );
+
+  // logged-in user (client-side)
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setUser(data.user));
   }, []);
 
-  //  fetch product
+  // fetch product
   useEffect(() => {
-    if (!params?.id) return;
+    const id = params?.id as string | undefined;
+    if (!id) return;
 
     const fetchProduct = async () => {
+      setLoading(true);
       try {
-        const res = await fetch(`/api/products/${params.id}`);
-        const data = await res.json();
+        const res = await fetch(`/api/products/${id}`, { cache: "no-store" });
+        if (!res.ok) throw new Error("Failed to fetch product");
+        const data: Product = await res.json();
         setProduct(data);
 
-        // pick first variant by default
-        if (data.variants?.length > 0) {
-          setSelectedVariant(data.variants[0]);
-        }
+        // pick first variant by default (or null if none)
+        const first = data.variants && data.variants.length > 0 ? data.variants[0] : null;
+        setSelectedVariant(first ?? null);
       } catch (err) {
         console.error("Failed to fetch product:", err);
+        setProduct(null);
       } finally {
         setLoading(false);
       }
@@ -64,29 +74,55 @@ export default function ProductDetailPage() {
     fetchProduct();
   }, [params?.id]);
 
+  const formatAttrs = (attrs?: VariantAttributes) => {
+    if (!attrs) return "";
+    if (Array.isArray(attrs)) return attrs.map((a) => `${a.name}: ${a.value}`).join(", ");
+    return Object.entries(attrs).map(([k, v]) => `${k}: ${String(v)}`).join(", ");
+  };
+
   if (loading) return <p className="p-4">Loading product...</p>;
   if (!product) return <p className="p-4 text-red-500">Product not found.</p>;
 
+  const effectivePrice = selectedVariant?.price ?? product.price;
+  const effectiveStock = selectedVariant?.stock ?? product.stock;
+
   const handleAddToCart = async () => {
+    if (adding) return;
+    setAdding(true);
+
+    // optimistic badge +1
+    setCartCount((product?.variants && selectedVariant ? 1 : 1));
+
     try {
-      const body = selectedVariant
-        ? { productId: product.id, variantId: selectedVariant.id, quantity: 1 }
-        : { productId: product.id, quantity: 1 };
+      const body =
+        selectedVariant && selectedVariant.id
+          ? { productId: product.id, variantId: selectedVariant.id, qty: 1, quantity: 1 }
+          : { productId: product.id, qty: 1, quantity: 1 };
 
       const res = await fetch("/api/cart/add", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        cache: "no-store",
         body: JSON.stringify(body),
       });
 
       if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || "Failed to add to cart");
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || `Failed to add to cart (${res.status})`);
       }
-      alert("✅ Added to cart!");
+
+      const data = await res.json(); // { ok, line, totals }
+      if (data?.totals?.totalItems != null) {
+        setCartCount(data.totals.totalItems); // sync to server truth
+      }
+      // optional toast here: “Added to cart”
     } catch (error: any) {
       console.error(error);
-      alert(error.message || "Something went wrong.");
+      // rollback optimistic bump
+      setCartCount(0);
+      alert(error?.message || "Something went wrong.");
+    } finally {
+      setAdding(false);
     }
   };
 
@@ -99,13 +135,17 @@ export default function ProductDetailPage() {
           className="w-full h-64 object-cover rounded mb-4"
         />
       )}
+
       <h1 className="text-3xl font-bold mb-2">{product.name}</h1>
-      <p className="text-gray-600 mb-2">{product.description}</p>
+      {product.description && (
+        <p className="text-gray-600 mb-2">{product.description}</p>
+      )}
+
       <p className="text-2xl font-semibold mb-2">
-        ${selectedVariant?.price ?? product.price}
+        {money.format(effectivePrice)}
       </p>
       <p className="text-sm text-gray-500 mb-4">
-        Stock: {selectedVariant?.stock ?? product.stock}
+        Stock: {effectiveStock}
       </p>
 
       {/* Variants */}
@@ -113,40 +153,43 @@ export default function ProductDetailPage() {
         <div className="mb-4">
           <p className="font-medium mb-2">Choose a Variant:</p>
           <div className="flex flex-col gap-2">
-            {product.variants.map((v) => (
-              <button
-                key={v.id}
-                onClick={() => setSelectedVariant(v)}
-                className={`border rounded px-3 py-2 text-left ${
-                  selectedVariant?.id === v.id
-                    ? "border-blue-500 bg-blue-50"
-                    : "border-gray-300"
-                }`}
-              >
-                <div className="text-sm">
-                  {v.attributes.map((a) => `${a.name}: ${a.value}`).join(", ")}
-                </div>
-                <div className="text-xs text-gray-500">
-                  SKU: {v.sku} | ${v.price ?? product.price} | Stock: {v.stock}
-                </div>
-              </button>
-            ))}
+            {product.variants.map((v) => {
+              const attrs = formatAttrs(v.attributes);
+              const priceLabel =
+                v.price != null ? money.format(v.price) : money.format(product.price);
+              const isActive = selectedVariant?.id === v.id;
+
+              return (
+                <button
+                  key={v.id}
+                  onClick={() => setSelectedVariant(v)}
+                  className={`border rounded px-3 py-2 text-left ${
+                    isActive ? "border-blue-500 bg-blue-50" : "border-gray-300"
+                  }`}
+                  title={attrs}
+                >
+                  <div className="text-sm">{attrs || "Variant"}</div>
+                  <div className="text-xs text-gray-500">
+                    SKU: {v.sku} | {priceLabel} | Stock: {v.stock}
+                  </div>
+                </button>
+              );
+            })}
           </div>
         </div>
       )}
 
-      {/* Only show button if logged in */}
+      {/* Add to Cart */}
       {user ? (
         <button
           onClick={handleAddToCart}
-          className="bg-blue-600 text-white px-4 py-2 rounded w-full"
+          disabled={adding || effectiveStock <= 0}
+          className="bg-blue-600 disabled:bg-blue-300 text-white px-4 py-2 rounded w-full"
         >
-          🛒 Add to Cart
+          {adding ? "Adding..." : "🛒 Add to Cart"}
         </button>
       ) : (
-        <p className="text-red-500">
-          ⚠️ Please log in to add items to cart.
-        </p>
+        <p className="text-red-500">⚠️ Please log in to add items to cart.</p>
       )}
     </div>
   );

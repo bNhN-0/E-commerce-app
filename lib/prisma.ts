@@ -1,25 +1,31 @@
 // lib/prisma.ts
-import { PrismaClient, Prisma } from '@prisma/client';
+import { PrismaClient } from "@prisma/client";
 
-const g = globalThis as unknown as {
-  prisma?: PrismaClient;
-  prismaDirect?: PrismaClient;
-};
-
-const logs: (Prisma.LogLevel | Prisma.LogDefinition)[] =
-  process.env.NODE_ENV === 'production' ? ['warn', 'error'] : ['query', 'warn', 'error'];
-
-export const prisma = g.prisma ?? new PrismaClient({ log: logs });
-
-// 👇 direct (NO pooler) for interactive transactions
-export const prismaDirect =
-  g.prismaDirect ??
+const make = (datasourceUrl?: string) =>
   new PrismaClient({
-    log: logs,
-    datasources: { db: { url: process.env.DIRECT_URL! } }, // supabase :5432
+    datasourceUrl,
+    log:
+      process.env.NODE_ENV === "development"
+        ? (["warn", "error"] as const)
+        : (["error"] as const),
   });
 
-if (process.env.NODE_ENV !== 'production') {
-  g.prisma = prisma;
-  g.prismaDirect = prismaDirect;
+declare global {
+  // eslint-disable-next-line no-var
+  var prisma: PrismaClient | undefined;
+  // eslint-disable-next-line no-var
+  var prismaDirect: PrismaClient | undefined;
+}
+
+// Pooled (PgBouncer)
+export const prisma =
+  global.prisma ?? make(process.env.DATABASE_URL);
+
+// Direct (primary)
+export const prismaDirect =
+  global.prismaDirect ?? make(process.env.DIRECT_URL);
+
+if (process.env.NODE_ENV !== "production") {
+  global.prisma = prisma;
+  global.prismaDirect = prismaDirect;
 }
