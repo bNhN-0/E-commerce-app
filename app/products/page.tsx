@@ -1,31 +1,32 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useCart } from "../components/CartContext";
 
-type Attribute = {
-  id: number;
-  name: string;
-  value: string;
-};
+type VariantAttributes =
+  | Record<string, unknown>
+  | Array<{ name: string; value: string }>
+  | null;
 
 type Variant = {
   id: number;
   sku: string;
-  price: number;
+  price: number | null;
   stock: number;
-  attributes: Attribute[];
+  attributes: VariantAttributes;
 };
 
 type Product = {
   id: number;
   name: string;
-  description?: string;
+  description?: string | null;
   price: number;
   stock: number;
-  imageUrl?: string;
+  imageUrl?: string | null;
+  averageRating?: number | null;
+  reviewCount?: number | null;
   variants: Variant[];
 };
 
@@ -43,55 +44,77 @@ export default function ProductsPage() {
   const [error, setError] = useState<string | null>(null);
 
   const searchParams = useSearchParams();
-  const category = searchParams.get("category");
-  const search = searchParams.get("search") || "";
+  const category = searchParams.get("category") || undefined; // category name
+  const categoryId = searchParams.get("categoryId") || undefined; // preferred
+  const search = searchParams.get("search") || undefined;
+  const sort = (searchParams.get("sort") ||
+    "new") as "new" | "price_asc" | "price_desc" | "rating";
 
   const { refreshCart } = useCart();
 
-  const fetchProducts = async (page = 1) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const query = new URLSearchParams({
-        page: page.toString(),
-        limit: "12",
-        ...(category ? { category } : {}),
-        ...(search ? { search } : {}),
-      });
-
-      const res = await fetch(`/api/products?${query.toString()}`, {
-        cache: "no-store",
-      });
-
-      if (!res.ok) throw new Error("Failed to fetch products");
-
-      const data = await res.json();
-      setProducts(data.data || []);
-      setPagination(data.pagination || null);
-    } catch (err) {
-      setError("Could not load products. Please try again.");
-    } finally {
-      setLoading(false);
+  const formatAttributes = (attrs: VariantAttributes) => {
+    if (!attrs) return "";
+    // legacy array form: [{name, value}]
+    if (Array.isArray(attrs)) {
+      return attrs.map((a) => `${a.name}: ${a.value}`).join(", ");
     }
+    // object form: { color: "red", size: "M" }
+    return Object.entries(attrs)
+      .map(([k, v]) => `${k}: ${String(v)}`)
+      .join(", ");
   };
 
+  const fetchProducts = useCallback(
+    async (page = 1) => {
+      setLoading(true);
+      setError(null);
+      try {
+        const query = new URLSearchParams({
+          page: String(page),
+          limit: "12",
+          ...(category ? { category } : {}),
+          ...(categoryId ? { categoryId } : {}),
+          ...(search ? { search } : {}),
+          ...(sort ? { sort } : {}),
+        });
+
+        const res = await fetch(`/api/products?${query.toString()}`, {
+          cache: "no-store",
+        });
+
+        if (!res.ok) throw new Error("Failed to fetch products");
+
+        // API returns { data, pagination }
+        const data = await res.json();
+        setProducts(data.data || []);
+        setPagination(data.pagination || null);
+      } catch (_err) {
+        setError("Could not load products. Please try again.");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [category, categoryId, search, sort]
+  );
+
   useEffect(() => {
-    fetchProducts();
-  }, [category, search]);
+    fetchProducts(1);
+  }, [fetchProducts]);
 
   const handleAddToCart = async (productId: number) => {
     try {
+      // our server expects { productId, qty }, but also include "quantity" for backward compat
       const res = await fetch("/api/cart/add", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ productId, quantity: 1 }),
+        body: JSON.stringify({ productId, qty: 1, quantity: 1 }),
       });
 
       if (!res.ok) throw new Error("Failed to add to cart");
 
       refreshCart();
-    } catch (err) {
-      alert(" Could not add to cart");
+    } catch (_err) {
+      alert("Could not add to cart");
     }
   };
 
@@ -120,24 +143,29 @@ export default function ProductsPage() {
   return (
     <div className="p-6">
       <h1 className="text-3xl font-bold mb-6 text-center">
-        {category ? `Products in ${category}` : "All Products"}
+        {category
+          ? `Products in ${category}`
+          : categoryId
+          ? `Products in category #${categoryId}`
+          : "All Products"}
         {search ? ` matching "${search}"` : ""}
       </h1>
 
       {/* Product grid */}
       {products.length === 0 ? (
         <p className="text-center text-gray-500">
-          No products found {category ? `in ${category}` : ""}
-          {search ? ` for "${search}"` : ""}.
+          No products found{" "}
+          {category ? `in ${category}` : categoryId ? `in #${categoryId}` : ""}{" "}
+          {search ? `for "${search}"` : ""}.
         </p>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
           {products.map((p) => (
             <div
               key={p.id}
-              className="group border rounded-2xl shadow hover:shadow-xl transition overflow-hidden bg-white cursor-pointer"
+              className="group border rounded-2xl shadow hover:shadow-xl transition overflow-hidden bg-white"
             >
-              <Link href={`/products/${p.id}`}>
+              <Link href={`/products/${p.id}`} className="block">
                 {p.imageUrl ? (
                   <img
                     src={p.imageUrl}
@@ -154,18 +182,27 @@ export default function ProductsPage() {
 
               <div className="p-4">
                 <h2 className="font-semibold text-lg truncate">{p.name}</h2>
-                <p className="text-gray-600 text-sm line-clamp-2 mb-2">
-                  {p.description}
-                </p>
-                <div className="flex justify-between items-center mb-3">
-                  <span className="font-bold text-blue-600">${p.price}</span>
-                  <span className="text-xs text-gray-500">
-                    Stock: {p.stock}
+                {p.description ? (
+                  <p className="text-gray-600 text-sm line-clamp-2 mb-2">
+                    {p.description}
+                  </p>
+                ) : null}
+
+                <div className="flex justify-between items-center mb-2">
+                  <span className="font-bold text-blue-600">
+                    ${p.price.toFixed(2)}
                   </span>
+                  <span className="text-xs text-gray-500">Stock: {p.stock}</span>
                 </div>
 
+                {(p.averageRating ?? 0) > 0 && (
+                  <div className="text-xs text-gray-500 mb-3">
+                    ⭐ {(p.averageRating ?? 0).toFixed(1)} ({p.reviewCount ?? 0})
+                  </div>
+                )}
+
                 {/* Variants preview */}
-                {p.variants && p.variants.length > 0 && (
+                {p.variants?.length ? (
                   <div className="mb-3">
                     <p className="text-xs text-gray-500 mb-1">Variants:</p>
                     <div className="flex flex-wrap gap-2">
@@ -173,18 +210,17 @@ export default function ProductsPage() {
                         <div
                           key={v.id}
                           className="border px-2 py-1 rounded text-xs bg-gray-50"
+                          title={formatAttributes(v.attributes)}
                         >
-                          {v.attributes
-                            .map((a) => `${a.name}: ${a.value}`)
-                            .join(", ")}
-                          {v.price ? ` - $${v.price}` : ""}
+                          {formatAttributes(v.attributes)}
+                          {v.price != null ? ` - $${v.price}` : ""}
                         </div>
                       ))}
                     </div>
                   </div>
-                )}
+                ) : null}
 
-                {/*  Add to Cart button */}
+                {/* Add to Cart */}
                 <button
                   onClick={() => handleAddToCart(p.id)}
                   className="w-full bg-orange-500 hover:bg-orange-600 text-white py-2 rounded-lg transition"

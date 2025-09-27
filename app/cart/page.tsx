@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { useCart } from "../components/CartContext";
@@ -26,9 +26,15 @@ export default function CartPage() {
   const [cart, setCart] = useState<{ items: CartItem[] }>({ items: [] });
   const [loading, setLoading] = useState(true);
   const router = useRouter();
-
   const { refreshCart, setCartCount } = useCart();
+  const debounceRef = useRef<NodeJS.Timeout | null>(null);
 
+  const currency = new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+  });
+
+  // Fetch cart
   useEffect(() => {
     const fetchCart = async () => {
       const {
@@ -57,42 +63,42 @@ export default function CartPage() {
     fetchCart();
   }, [router]);
 
-  let timer: NodeJS.Timeout;
+  // Debounced API updater
+  const updateQuantity = useCallback(
+    (productId: number, variantId: number | null, newQty: number) => {
+      // Optimistic UI update
+      const prevCart = structuredClone(cart);
+      setCart((prev) => ({
+        ...prev,
+        items: prev.items
+          .map((item) =>
+            item.product.id === productId && item.variant?.id === variantId
+              ? { ...item, quantity: newQty }
+              : item
+          )
+          .filter((item) => item.quantity > 0),
+      }));
 
-  const updateQuantity = (
-    productId: number,
-    variantId: number | null,
-    newQty: number
-  ) => {
-    setCart((prev) => ({
-      ...prev,
-      items: prev.items
-        .map((item) =>
-          item.product.id === productId && item.variant?.id === variantId
-            ? { ...item, quantity: newQty }
-            : item
-        )
-        .filter((item) => item.quantity > 0),
-    }));
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      debounceRef.current = setTimeout(async () => {
+        const res = await fetch("/api/cart/update", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ productId, variantId, quantity: newQty }),
+        });
 
-    clearTimeout(timer);
-    timer = setTimeout(async () => {
-      const res = await fetch("/api/cart/update", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ productId, variantId, quantity: newQty }),
-      });
+        if (!res.ok) {
+          console.warn("❌ Failed to update cart, reverting...");
+          setCart(prevCart); // rollback
+        }
 
-      if (!res.ok) {
-        alert(" Failed to update cart, refreshing...");
-        const data = await fetch("/api/cart").then((r) => r.json());
-        setCart(data);
-      }
+        refreshCart();
+      }, 400);
+    },
+    [cart, refreshCart]
+  );
 
-      refreshCart();
-    }, 400);
-  };
-
+  // Checkout
   const handleCheckout = async () => {
     const res = await fetch("/api/orders", { method: "POST" });
 
@@ -103,99 +109,127 @@ export default function CartPage() {
       router.push("/orders");
     } else {
       const error = await res.json();
-      alert(` ${error.error}`);
+      alert(`❌ ${error.error}`);
     }
   };
 
-  if (loading) return <p className="p-4">Loading cart...</p>;
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-600 border-t-transparent" />
+      </div>
+    );
+  }
 
   const total = cart.items.reduce(
     (sum, item) =>
-      sum +
-      item.quantity *
-        (item.variant?.price ?? item.product.price), 
+      sum + item.quantity * (item.variant?.price ?? item.product.price),
     0
   );
 
   return (
-    <div className="p-6 max-w-2xl mx-auto">
-      <h1 className="text-2xl font-bold mb-4">Your Cart</h1>
+    <div className="p-6 max-w-3xl mx-auto">
+      <h1 className="text-2xl font-bold mb-6">🛒 Your Cart</h1>
 
       {cart.items.length === 0 ? (
-        <p>Your cart is empty.</p>
+        <div className="text-center py-16 text-gray-500 border rounded-lg bg-gray-50">
+          <p className="mb-4">Your cart is empty.</p>
+          <button
+            onClick={() => router.push("/products")}
+            className="bg-blue-600 text-white px-5 py-2 rounded-lg hover:bg-blue-700 transition"
+          >
+            Browse Products
+          </button>
+        </div>
       ) : (
         <>
-          {cart.items.map((item) => (
-            <div
-              key={item.id}
-              className="flex justify-between items-center border-b py-2"
-            >
-              <div className="flex items-center gap-3">
-                {item.product.imageUrl && (
-                  <img
-                    src={item.product.imageUrl}
-                    alt={item.product.name}
-                    className="w-16 h-16 object-cover rounded"
-                  />
-                )}
-                <div>
-                  <p className="font-semibold">{item.product.name}</p>
-                  {item.variant && (
-                    <p className="text-sm text-gray-600">
-                      {item.variant.attributes
-                        .map((a) => `${a.name}: ${a.value}`)
-                        .join(", ")}
-                    </p>
-                  )}
-                  <p>
-                    $
-                    {item.variant?.price != null
-                      ? item.variant.price
-                      : item.product.price}
+          <div className="space-y-4">
+            {cart.items.map((item) => {
+              const price = item.variant?.price ?? item.product.price;
+              return (
+                <div
+                  key={item.id}
+                  className="flex justify-between items-center border rounded-lg p-4 bg-white shadow-sm"
+                >
+                  <div className="flex items-center gap-3">
+                    {item.product.imageUrl ? (
+                      <img
+                        src={item.product.imageUrl}
+                        alt={item.product.name}
+                        className="w-16 h-16 object-cover rounded"
+                      />
+                    ) : (
+                      <div className="w-16 h-16 bg-gray-200 flex items-center justify-center rounded text-gray-400">
+                        📦
+                      </div>
+                    )}
+                    <div>
+                      <p className="font-semibold">{item.product.name}</p>
+                      {item.variant && (
+                        <p className="text-xs text-gray-600">
+                          {item.variant.attributes
+                            .map((a) => `${a.name}: ${a.value}`)
+                            .join(", ")}
+                        </p>
+                      )}
+                      <p className="text-sm text-gray-700">
+                        {currency.format(price)} each
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={() =>
+                        updateQuantity(
+                          item.product.id,
+                          item.variant?.id ?? null,
+                          item.quantity - 1
+                        )
+                      }
+                      className="px-3 py-1 bg-gray-300 rounded disabled:opacity-50"
+                      disabled={item.quantity <= 1}
+                      aria-label="Decrease quantity"
+                    >
+                      –
+                    </button>
+                    <span className="min-w-[24px] text-center">
+                      {item.quantity}
+                    </span>
+                    <button
+                      onClick={() =>
+                        updateQuantity(
+                          item.product.id,
+                          item.variant?.id ?? null,
+                          item.quantity + 1
+                        )
+                      }
+                      className="px-3 py-1 bg-gray-300 rounded"
+                      aria-label="Increase quantity"
+                    >
+                      +
+                    </button>
+                  </div>
+
+                  <p className="font-bold text-blue-600">
+                    {currency.format(item.quantity * price)}
                   </p>
                 </div>
-              </div>
+              );
+            })}
+          </div>
 
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() =>
-                    updateQuantity(
-                      item.product.id,
-                      item.variant?.id ?? null,
-                      item.quantity - 1
-                    )
-                  }
-                  className="px-2 py-1 bg-gray-300 rounded"
-                >
-                  –
-                </button>
-                <span>{item.quantity}</span>
-                <button
-                  onClick={() =>
-                    updateQuantity(
-                      item.product.id,
-                      item.variant?.id ?? null,
-                      item.quantity + 1
-                    )
-                  }
-                  className="px-2 py-1 bg-gray-300 rounded"
-                >
-                  +
-                </button>
-              </div>
-            </div>
-          ))}
-
-          <div className="flex justify-between font-bold text-lg mt-4">
+          {/* Total + Checkout */}
+          <div className="flex justify-between items-center font-bold text-xl mt-6 border-t pt-4">
             <span>Total:</span>
-            <span>${total}</span>
+            <span className="text-green-700">{currency.format(total)}</span>
           </div>
 
           <button
             onClick={handleCheckout}
-            className="mt-6 w-full bg-green-600 text-white px-4 py-2 rounded"
+            className="mt-6 w-full bg-green-600 text-white px-5 py-3 rounded-lg hover:bg-green-700 transition text-lg"
           >
-            Place Order
+            ✅ Place Order
           </button>
         </>
       )}

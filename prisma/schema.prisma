@@ -9,11 +9,11 @@ generator client {
 }
 
 model User {
-  id             String          @id @default(uuid()) // from Supabase auth
+  id             String          @id @default(uuid())
   name           String
   email          String          @unique
-  phone          String?         // optional for profile
-  avatarUrl      String?         // profile picture
+  phone          String?
+  avatarUrl      String?
   role           Role            @default(CUSTOMER)
   addresses      Address[]
   paymentMethods PaymentMethod[]
@@ -22,6 +22,8 @@ model User {
   reviews        Review[]
   wishlists      Wishlist[]
   createdAt      DateTime        @default(now())
+
+  @@index([email])
 }
 
 enum Role {
@@ -43,24 +45,28 @@ model Address {
   createdAt  DateTime @default(now())
 
   orders Order[] @relation("AddressOrders")
+
+  @@index([userId])
 }
 
 model PaymentMethod {
   id        Int      @id @default(autoincrement())
   user      User     @relation(fields: [userId], references: [id])
   userId    String
-  type      String   // "card", "bank", "paypal", etc.
-  provider  String?  // e.g. "Visa", "MasterCard", "BDO Bank"
-  last4     String?  // last 4 digits of card for display
+  type      String
+  provider  String?
+  last4     String?
   createdAt DateTime @default(now())
 
   payments  Payment[]
+
+  @@index([userId])
 }
 
 model Category {
-  id          Int       @id @default(autoincrement())
+  id          Int      @id @default(autoincrement())
   type        CategoryType
-  name        String    @unique
+  name        String   @unique
   description String?
   products    Product[]
 }
@@ -74,46 +80,49 @@ enum CategoryType {
 }
 
 model Product {
-  id          Int             @id @default(autoincrement())
-  name        String
-  description String?
-  price       Float
-  currency    String          @default("USD")
-  stock       Int             @default(0)
-  category    Category        @relation(fields: [categoryId], references: [id])
-  categoryId  Int
-  imageUrl    String?
-  reviews     Review[]
-  cartItems   CartItem[]
-  orderItems  OrderItem[]
-  variants    ProductVariant[]
-  media       ProductMedia[]
-  wishlistItems WishlistItem[]
-  createdAt   DateTime        @default(now())
+  id             Int             @id @default(autoincrement())
+  name           String
+  description    String?
+  price          Float
+  currency       String          @default("USD")
+  stock          Int             @default(0)
+  category       Category        @relation(fields: [categoryId], references: [id])
+  categoryId     Int
+  imageUrl       String?
+  reviews        Review[]
+  cartItems      CartItem[]
+  orderItems     OrderItem[]
+  variants       ProductVariant[]
+  media          ProductMedia[]
+  wishlistItems  WishlistItem[]
+  createdAt      DateTime        @default(now())
+
+  // Denormalized aggregates for fast reads
+  averageRating  Float?          @default(0)
+  reviewCount    Int             @default(0)
 
   @@index([name])
   @@index([categoryId])
+  @@index([createdAt])
+  @@index([price])   // sort/filter by price fast
+  @@index([stock])   // in-stock filtering fast
 }
-
 
 model ProductVariant {
-  id          Int                 @id @default(autoincrement())
-  product     Product             @relation(fields: [productId], references: [id])
-  productId   Int
-  sku         String              @unique
-  price       Float?
-  stock       Int                 @default(0)
-  attributes  VariantAttribute[]
-  createdAt   DateTime            @default(now())
-  CartItem CartItem[]
-}
+  id         Int      @id @default(autoincrement())
+  product    Product  @relation(fields: [productId], references: [id])
+  productId  Int
+  sku        String   @unique
+  price      Float?
+  stock      Int      @default(0)
 
-model VariantAttribute {
-  id          Int            @id @default(autoincrement())
-  variant     ProductVariant @relation(fields: [variantId], references: [id])
-  variantId   Int
-  name        String         // e.g. "Color", "Size", "Storage"
-  value       String         // e.g. "Red", "XL", "256GB"
+  // JSON keeps attributes flexible and avoids extra joins
+  attributes Json
+
+  createdAt  DateTime @default(now())
+  CartItem   CartItem[]
+
+  @@index([productId])
 }
 
 model ProductMedia {
@@ -121,8 +130,10 @@ model ProductMedia {
   product   Product  @relation(fields: [productId], references: [id])
   productId Int
   url       String
-  type      String   // "image", "video"
+  type      String
   createdAt DateTime @default(now())
+
+  @@index([productId])
 }
 
 model Wishlist {
@@ -131,6 +142,8 @@ model Wishlist {
   userId    String
   items     WishlistItem[]
   createdAt DateTime      @default(now())
+
+  @@index([userId])
 }
 
 model WishlistItem {
@@ -141,31 +154,42 @@ model WishlistItem {
   productId  Int
   addedAt    DateTime @default(now())
 
-  @@unique([wishlistId, productId]) // prevent duplicates
+  @@unique([wishlistId, productId])
+  @@index([productId])
 }
 
 model Cart {
-  id        Int        @id @default(autoincrement())
-  user      User       @relation(fields: [userId], references: [id])
-  userId    String
-  items     CartItem[]
-  createdAt DateTime   @default(now())
+  id          Int        @id @default(autoincrement())
+  user        User       @relation(fields: [userId], references: [id])
+  userId      String     @unique
+  items       CartItem[]
+  createdAt   DateTime   @default(now())
+
+  // Denormalized totals for instant cart summaries
+  totalItems  Int        @default(0)
+  totalAmount Float      @default(0)
+
+  @@index([userId])
 }
 
 model CartItem {
-  id        Int             @id @default(autoincrement())
-  cart      Cart            @relation(fields: [cartId], references: [id])
-  cartId    Int
-  product   Product         @relation(fields: [productId], references: [id])
-  productId Int
-  variant   ProductVariant? @relation(fields: [variantId], references: [id])
-  variantId Int?
-  quantity  Int
-  createdAt DateTime        @default(now())
+  id         Int             @id @default(autoincrement())
+  cartId     Int
+  productId  Int
+  variantId  Int?
+  quantity   Int
+  createdAt  DateTime        @default(now())
 
-  @@unique([cartId, productId, variantId]) 
+  cart       Cart            @relation(fields: [cartId], references: [id])
+  product    Product         @relation(fields: [productId], references: [id])
+  variant    ProductVariant? @relation(fields: [variantId], references: [id])
+
+  // Note: variantId nullable means do manual upsert (findFirst + update/create)
+  @@unique([cartId, productId, variantId])
+  @@index([cartId, createdAt])
+  @@index([productId])
+  @@index([variantId])
 }
-
 
 model Order {
   id        Int           @id @default(autoincrement())
@@ -178,10 +202,12 @@ model Order {
   items     OrderItem[]
   coupons   OrderCoupon[]
   payments  Payment[]
-  shipment  Shipment?
+  shipments Shipment[]    // allow split shipments
   createdAt DateTime      @default(now())
 
   @@index([userId])
+  @@index([createdAt])
+  @@index([status])
 }
 
 enum OrderStatus {
@@ -198,8 +224,12 @@ model OrderItem {
   orderId   Int
   product   Product @relation(fields: [productId], references: [id])
   productId Int
+  variantId Int?
   quantity  Int
   price     Float
+
+  @@index([orderId])
+  @@index([productId])
 }
 
 model Payment {
@@ -212,6 +242,9 @@ model Payment {
   status          PaymentStatus  @default(PENDING)
   transactionId   String?
   createdAt       DateTime       @default(now())
+
+  @@index([orderId])
+  @@index([status])
 }
 
 enum PaymentStatus {
@@ -230,7 +263,7 @@ model Review {
   comment   String?
   createdAt DateTime @default(now())
 
-  @@index([productId])
+  @@index([productId, createdAt]) // latest reviews fast
   @@index([userId])
 }
 
@@ -249,17 +282,21 @@ model OrderCoupon {
   orderId  Int
   coupon   Coupon @relation(fields: [couponId], references: [id])
   couponId Int
+
+  @@index([orderId, couponId])
 }
 
 model Shipment {
   id          Int            @id @default(autoincrement())
   order       Order          @relation(fields: [orderId], references: [id])
-  orderId     Int @unique
-  carrier     String         // e.g. "DHL", "FedEx", "UPS"
+  orderId     Int
+  carrier     String
   trackingId  String?
   status      ShipmentStatus @default(PROCESSING)
   shippedAt   DateTime?
   deliveredAt DateTime?
+
+  @@index([orderId])
 }
 
 enum ShipmentStatus {

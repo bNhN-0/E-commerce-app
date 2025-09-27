@@ -1,96 +1,106 @@
-import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { getUserSession } from "@/lib/auth";
+// app/api/products/route.ts
+import { NextResponse } from 'next/server';
+import { prisma } from '@/lib/prisma';
+import { getUserSession } from '@/lib/auth';
+import { Prisma } from '@prisma/client';
+
+export const runtime = 'nodejs';
 
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
-    const page = searchParams.get("page");
-    const limit = searchParams.get("limit");
-    const category = searchParams.get("category");
-    const search = searchParams.get("search");
 
-    const where: any = {};
+    const page  = Math.max(parseInt(searchParams.get('page') ?? '1', 10) || 1, 1);
+    const limit = Math.min(parseInt(searchParams.get('limit') ?? '20', 10) || 20, 50);
+    const skip  = (page - 1) * limit;
 
-    if (category) {
-      where.category = {
-        name: { equals: category, mode: "insensitive" },
-      };
-    }
+    const categoryName   = searchParams.get('category') ?? undefined;
+    const categoryIdRaw  = searchParams.get('categoryId');
+    const categoryId     = categoryIdRaw ? Number(categoryIdRaw) : undefined;
+    const search         = searchParams.get('search') ?? undefined;
+    const sort = (searchParams.get('sort') ?? 'new') as
+      | 'new' | 'price_asc' | 'price_desc' | 'rating';
 
-    if (search) {
-      where.OR = [
-        { name: { contains: search, mode: "insensitive" } },
-        { description: { contains: search, mode: "insensitive" } },
-      ];
-    }
+    const where: Prisma.ProductWhereInput = {
+      ...(categoryId
+        ? { categoryId }
+        : categoryName
+        ? { category: { name: { equals: categoryName, mode: 'insensitive' } } }
+        : {}),
+      ...(search
+        ? {
+            OR: [
+              { name: { contains: search, mode: 'insensitive' } },
+              { description: { contains: search, mode: 'insensitive' } },
+            ],
+          }
+        : {}),
+    };
 
-    if (page && limit) {
-      const pageNum = parseInt(page) || 1;
-      const limitNum = parseInt(limit) || 12;
-      const skip = (pageNum - 1) * limitNum;
+    // ✅ Always provide an array and use correct Prisma types
+    const orderBy: Prisma.ProductOrderByWithRelationInput[] =
+      sort === 'price_asc'
+        ? [{ price: 'asc' }]
+        : sort === 'price_desc'
+        ? [{ price: 'desc' }]
+        : sort === 'rating'
+        ? [{ averageRating: 'desc' }, { reviewCount: 'desc' }]
+        : [{ createdAt: 'desc' }];
 
-      const [products, total] = await Promise.all([
-        prisma.product.findMany({
-          skip,
-          take: limitNum,
-          where,
-          include: {
-            category: { select: { id: true, name: true, type: true } },
-            variants: { include: { attributes: true } }, // ✅ now included
-          },
-          orderBy: { createdAt: "desc" },
-        }),
-        prisma.product.count({ where }),
-      ]);
-
-      return NextResponse.json({
-        data: products,
-        pagination: {
-          page: pageNum,
-          limit: limitNum,
-          total,
-          totalPages: Math.ceil(total / limitNum),
-        },
-      });
-    } else {
-      const products = await prisma.product.findMany({
+    const [items, total] = await Promise.all([
+      prisma.product.findMany({
+        skip,
+        take: limit,
         where,
-        include: {
+        orderBy,
+        select: {
+          id: true,
+          name: true,
+          price: true,
+          stock: true,
+          imageUrl: true,
+          averageRating: true,
+          reviewCount: true,
+          createdAt: true,
           category: { select: { id: true, name: true, type: true } },
-          variants: { include: { attributes: true } }, 
+          // variants.attributes is JSON in your schema
+          variants: { select: { id: true, sku: true, price: true, stock: true, attributes: true } },
         },
-        orderBy: { createdAt: "desc" },
-      });
+      }),
+      prisma.product.count({ where }),
+    ]);
 
-      return NextResponse.json(products);
-    }
-  } catch (error) {
-    console.error("Failed to fetch products:", error);
     return NextResponse.json(
-      { error: "Failed to fetch products" },
-      { status: 500 }
+      {
+        data: items,
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages: Math.ceil(total / limit),
+        },
+      },
+      {
+        headers: { 'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300' },
+      }
     );
+  } catch (error) {
+    console.error('Failed to fetch products:', error);
+    return NextResponse.json({ error: 'Failed to fetch products' }, { status: 500 });
   }
 }
 
-// POST create product (ADMIN only)
+// POST create product (ADMIN only) — matches JSON variant attributes
 export async function POST(req: Request) {
   try {
     const user = await getUserSession();
-    if (!user) return NextResponse.json({ error: "Not logged in" }, { status: 401 });
-    if (user.role !== "ADMIN") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    if (!user) return NextResponse.json({ error: 'Not logged in' }, { status: 401 });
+    if (user.role !== 'ADMIN') return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
     const body = await req.json();
-    const { name, description, price, stock, imageUrl, categoryId, variants } = body;
-
+    const { name, description, price, stock, imageUrl, categoryId, variants } = body ?? {};
     if (!categoryId) {
-      return NextResponse.json({ error: "Category is required" }, { status: 400 });
-    }
-
-    const category = await prisma.category.findUnique({ where: { id: categoryId } });
-    if (!category) {
-      return NextResponse.json({ error: "Category not found" }, { status: 404 });
+      return NextResponse.json({ error: 'Category is required' }, { status: 400 });
     }
 
     const newProduct = await prisma.product.create({
@@ -100,32 +110,39 @@ export async function POST(req: Request) {
         price,
         stock,
         imageUrl,
-        categoryId,
-        variants: variants?.length
-          ? {
-              create: variants.map((v: any) => ({
-                sku: v.sku,
-                price: v.price,
-                stock: v.stock,
-                attributes: {
-                  create: v.attributes?.map((a: any) => ({
-                    name: a.name,
-                    value: a.value,
-                  })) || [],
-                },
-              })),
-            }
-          : undefined,
+        categoryId: Number(categoryId),
+        variants:
+          Array.isArray(variants) && variants.length
+            ? {
+                create: variants.map((v: any) => ({
+                  sku: v.sku,
+                  price: v.price ?? null,
+                  stock: v.stock ?? 0,
+                  attributes: v.attributes ?? {}, // JSON blob
+                })),
+              }
+            : undefined,
+        averageRating: 0,
+        reviewCount: 0,
       },
-      include: {
+      select: {
+        id: true,
+        name: true,
+        description: true,
+        price: true,
+        stock: true,
+        imageUrl: true,
+        averageRating: true,
+        reviewCount: true,
+        createdAt: true,
         category: { select: { id: true, name: true, type: true } },
-        variants: { include: { attributes: true } },
+        variants: { select: { id: true, sku: true, price: true, stock: true, attributes: true } },
       },
     });
 
     return NextResponse.json(newProduct, { status: 201 });
   } catch (error) {
-    console.error("Failed to create product:", error);
-    return NextResponse.json({ error: "Failed to create product" }, { status: 500 });
+    console.error('Failed to create product:', error);
+    return NextResponse.json({ error: 'Failed to create product' }, { status: 500 });
   }
 }

@@ -1,11 +1,11 @@
-// app/api/cart/update/route.ts
+// app/api/cart/remove/route.ts
 import { NextResponse } from 'next/server';
 import { prismaDirect } from '@/lib/prisma';
 import { getUserSession } from '@/lib/auth';
 
 export const runtime = 'nodejs';
 
-export async function PATCH(req: Request) {
+export async function POST(req: Request) {
   const user = await getUserSession();
   if (!user) return NextResponse.json({ error: 'Not logged in' }, { status: 401 });
 
@@ -14,11 +14,7 @@ export async function PATCH(req: Request) {
     const lineId = body.lineId != null ? Number(body.lineId) : undefined;
     const productId = body.productId != null ? Number(body.productId) : undefined;
     const variantId = body.variantId === null ? null : body.variantId != null ? Number(body.variantId) : undefined;
-    const newQty = Number(body.qty ?? body.quantity);
 
-    if (!Number.isFinite(newQty) || newQty < 0) {
-      return NextResponse.json({ error: 'qty must be a non-negative number' }, { status: 400 });
-    }
     if (!lineId && !productId) {
       return NextResponse.json({ error: 'Provide lineId or (productId[, variantId])' }, { status: 400 });
     }
@@ -40,25 +36,18 @@ export async function PATCH(req: Request) {
       });
       if (!line) throw new Error('LINE_NOT_FOUND');
 
+      const qty = line.quantity;
       const unitPrice = (line.variant?.price ?? line.product.price) ?? 0;
-      const oldQty = line.quantity;
-      const delta = newQty - oldQty;
 
-      if (newQty === 0) {
-        await tx.cartItem.delete({ where: { id: line.id } });
-      } else {
-        await tx.cartItem.update({ where: { id: line.id }, data: { quantity: newQty } });
-      }
+      await tx.cartItem.delete({ where: { id: line.id } });
 
-      if (delta !== 0) {
-        await tx.cart.update({
-          where: { id: cart.id },
-          data: {
-            totalItems: { increment: delta },
-            totalAmount: { increment: unitPrice * delta },
-          },
-        });
-      }
+      await tx.cart.update({
+        where: { id: cart.id },
+        data: {
+          totalItems: { decrement: qty },
+          totalAmount: { decrement: unitPrice * qty },
+        },
+      });
 
       return tx.cart.findUnique({
         where: { id: cart.id },
@@ -80,7 +69,7 @@ export async function PATCH(req: Request) {
   } catch (err: any) {
     if (err?.message === 'CART_NOT_FOUND') return NextResponse.json({ error: 'Cart not found' }, { status: 404 });
     if (err?.message === 'LINE_NOT_FOUND') return NextResponse.json({ error: 'Cart item not found' }, { status: 404 });
-    console.error('PATCH /api/cart/update failed', err);
-    return NextResponse.json({ error: 'Failed to update cart' }, { status: 500 });
+    console.error('POST /api/cart/remove failed', err);
+    return NextResponse.json({ error: 'Failed to remove cart item' }, { status: 500 });
   }
 }
