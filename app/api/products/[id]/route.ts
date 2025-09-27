@@ -1,18 +1,22 @@
-// app/api/products/[id]/route.ts
-import { NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
-import { getUserSession } from '@/lib/auth';
-import { Prisma } from '@prisma/client';
+import { NextResponse } from "next/server";
+import { prisma } from "@/lib/prisma";
+import { getUserSession } from "@/lib/auth";
+import { Prisma } from "@prisma/client";
 
-export const runtime = 'nodejs';
+export const runtime = "nodejs";
 
-type Params = { params: { id: string } };
+// Handle both sync & async params across Next.js versions
+type Ctx = { params: { id: string } } | { params: Promise<{ id: string }> };
+const readId = async (ctx: Ctx) => {
+  const { id } = await (ctx as any).params;
+  const num = Number(id);
+  return Number.isFinite(num) ? num : NaN;
+};
 
-// -------------------- GET /api/products/:id --------------------
-export async function GET(_req: Request, { params }: Params) {
-  const id = Number(params.id);
+export async function GET(_req: Request, ctx: Ctx) {
+  const id = await readId(ctx);
   if (!Number.isFinite(id)) {
-    return NextResponse.json({ error: 'Invalid product id' }, { status: 400 });
+    return NextResponse.json({ error: "Invalid product id" }, { status: 400 });
   }
 
   try {
@@ -36,43 +40,43 @@ export async function GET(_req: Request, { params }: Params) {
             sku: true,
             price: true,
             stock: true,
-            attributes: true, // JSON read is fine
+            attributes: true, // JSON passthrough
           },
-          orderBy: { id: 'asc' },
+          orderBy: { id: "asc" },
         },
       },
     });
 
     if (!product) {
-      return NextResponse.json({ error: 'Product not found' }, { status: 404 });
+      return NextResponse.json({ error: "Product not found" }, { status: 404 });
     }
 
     return NextResponse.json(product, {
-      headers: { 'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300' },
+      headers: { "Cache-Control": "public, s-maxage=60, stale-while-revalidate=300" },
     });
   } catch (err) {
-    console.error('GET /products/:id failed', err);
-    return NextResponse.json({ error: 'Failed to fetch product' }, { status: 500 });
+    console.error("GET /products/:id failed", err);
+    return NextResponse.json({ error: "Failed to fetch product" }, { status: 500 });
   }
 }
 
 // -------------------- PATCH /api/products/:id (ADMIN) --------------------
-export async function PATCH(req: Request, { params }: Params) {
-  const id = Number(params.id);
+export async function PATCH(req: Request, ctx: Ctx) {
+  const id = await readId(ctx);
   if (!Number.isFinite(id)) {
-    return NextResponse.json({ error: 'Invalid product id' }, { status: 400 });
+    return NextResponse.json({ error: "Invalid product id" }, { status: 400 });
   }
 
   const user = await getUserSession();
-  if (!user) return NextResponse.json({ error: 'Not logged in' }, { status: 401 });
-  if (user.role !== 'ADMIN') return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  if (!user) return NextResponse.json({ error: "Not logged in" }, { status: 401 });
+  if (user.role !== "ADMIN") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   type VariantInput = {
     id?: number;
     sku: string;
     price?: number | null;
     stock?: number;
-    attributes?: unknown; // can be object/array/primitive/null
+    attributes?: unknown;
   };
 
   try {
@@ -94,11 +98,11 @@ export async function PATCH(req: Request, { params }: Params) {
     if (body.imageUrl !== undefined) data.imageUrl = body.imageUrl;
     if (body.categoryId !== undefined) {
       const cat = await prisma.category.findUnique({ where: { id: Number(body.categoryId) } });
-      if (!cat) return NextResponse.json({ error: 'Category not found' }, { status: 404 });
+      if (!cat) return NextResponse.json({ error: "Category not found" }, { status: 404 });
       (data as any).category = { connect: { id: Number(body.categoryId) } };
     }
 
-    // If no variants provided, just update core fields
+    // No variants → only core fields
     if (!Array.isArray(body.variants)) {
       const updated = await prisma.product.update({
         where: { id },
@@ -121,27 +125,19 @@ export async function PATCH(req: Request, { params }: Params) {
       return NextResponse.json(updated);
     }
 
-    // Variants provided: replace semantics (upsert + delete removed)
+    // Variants provided → replace semantics (upsert + delete removed)
     const variants = body.variants as VariantInput[];
     const createPayload: Prisma.ProductVariantCreateManyInput[] = [];
     const updatePayload: { id: number; data: Prisma.ProductVariantUpdateInput }[] = [];
     const keepIds: number[] = [];
 
     for (const v of variants) {
-      // ✅ Ensure Prisma-compatible JSON input
-      const attrs: Prisma.InputJsonValue =
-        (v.attributes as Prisma.InputJsonValue) ?? {}; // default to {}
-
+      const attrs: Prisma.InputJsonValue = (v.attributes as Prisma.InputJsonValue) ?? {};
       if (v.id) {
         keepIds.push(Number(v.id));
         updatePayload.push({
           id: Number(v.id),
-          data: {
-            sku: v.sku,
-            price: v.price ?? null,
-            stock: v.stock ?? 0,
-            attributes: attrs, // <-- typed as Prisma.InputJsonValue
-          },
+          data: { sku: v.sku, price: v.price ?? null, stock: v.stock ?? 0, attributes: attrs },
         });
       } else {
         createPayload.push({
@@ -149,7 +145,7 @@ export async function PATCH(req: Request, { params }: Params) {
           sku: v.sku,
           price: v.price ?? null,
           stock: v.stock ?? 0,
-          attributes: attrs, // <-- typed as Prisma.InputJsonValue
+          attributes: attrs,
         });
       }
     }
@@ -157,28 +153,18 @@ export async function PATCH(req: Request, { params }: Params) {
     const result = await prisma.$transaction(async (tx) => {
       await tx.product.update({ where: { id }, data });
 
-      // Delete removed variants
       await tx.productVariant.deleteMany({
-        where: {
-          productId: id,
-          ...(keepIds.length ? { id: { notIn: keepIds } } : {}), // if empty, delete all
-        },
+        where: { productId: id, ...(keepIds.length ? { id: { notIn: keepIds } } : {}) },
       });
 
-      // Update existing
       for (const u of updatePayload) {
-        await tx.productVariant.update({
-          where: { id: u.id },
-          data: u.data,
-        });
+        await tx.productVariant.update({ where: { id: u.id }, data: u.data });
       }
 
-      // Create new
       if (createPayload.length) {
         await tx.productVariant.createMany({ data: createPayload });
       }
 
-      // Return fresh product
       return tx.product.findUnique({
         where: { id },
         select: {
@@ -195,7 +181,7 @@ export async function PATCH(req: Request, { params }: Params) {
           media: { select: { id: true, url: true, type: true } },
           variants: {
             select: { id: true, sku: true, price: true, stock: true, attributes: true },
-            orderBy: { id: 'asc' },
+            orderBy: { id: "asc" },
           },
         },
       });
@@ -203,24 +189,27 @@ export async function PATCH(req: Request, { params }: Params) {
 
     return NextResponse.json(result);
   } catch (err: any) {
-    if (err?.code === 'P2002') {
-      return NextResponse.json({ error: 'Unique constraint failed (e.g., duplicate SKU)' }, { status: 409 });
+    if (err?.code === "P2002") {
+      return NextResponse.json(
+        { error: "Unique constraint failed (e.g., duplicate SKU)" },
+        { status: 409 }
+      );
     }
-    console.error('PATCH /products/:id failed', err);
-    return NextResponse.json({ error: 'Failed to update product' }, { status: 500 });
+    console.error("PATCH /products/:id failed", err);
+    return NextResponse.json({ error: "Failed to update product" }, { status: 500 });
   }
 }
 
 // -------------------- DELETE /api/products/:id (ADMIN) --------------------
-export async function DELETE(_req: Request, { params }: Params) {
-  const id = Number(params.id);
+export async function DELETE(_req: Request, ctx: Ctx) {
+  const id = await readId(ctx);
   if (!Number.isFinite(id)) {
-    return NextResponse.json({ error: 'Invalid product id' }, { status: 400 });
+    return NextResponse.json({ error: "Invalid product id" }, { status: 400 });
   }
 
   const user = await getUserSession();
-  if (!user) return NextResponse.json({ error: 'Not logged in' }, { status: 401 });
-  if (user.role !== 'ADMIN') return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+  if (!user) return NextResponse.json({ error: "Not logged in" }, { status: 401 });
+  if (user.role !== "ADMIN") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   try {
     const [inCarts, inOrders, inWishlists, reviews] = await Promise.all([
@@ -234,7 +223,7 @@ export async function DELETE(_req: Request, { params }: Params) {
     if (refs > 0) {
       return NextResponse.json(
         {
-          error: 'Product is referenced and cannot be deleted',
+          error: "Product is referenced and cannot be deleted",
           references: { inCarts, inOrders, inWishlists, reviews },
         },
         { status: 409 }
@@ -249,7 +238,7 @@ export async function DELETE(_req: Request, { params }: Params) {
 
     return NextResponse.json({ ok: true });
   } catch (err) {
-    console.error('DELETE /products/:id failed', err);
-    return NextResponse.json({ error: 'Failed to delete product' }, { status: 500 });
+    console.error("DELETE /products/:id failed", err);
+    return NextResponse.json({ error: "Failed to delete product" }, { status: 500 });
   }
 }

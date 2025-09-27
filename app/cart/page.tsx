@@ -16,7 +16,7 @@ type CartItem = {
   productId?: number;
   variantId?: number | null;
 
-  // 🧊 snapshot fields (server may return these)
+  // snapshot fields (server may return these)
   productName?: string;
   productImageUrl?: string | null;
   unitPrice?: number | null;
@@ -30,7 +30,7 @@ type CartItem = {
     id: number;
     sku: string;
     price?: number | null;
-    attributes?: VariantAttributes; // ✅ widened type
+    attributes?: VariantAttributes;
   } | null;
 };
 
@@ -69,20 +69,18 @@ const formatAnyAttrs = (attrs: unknown): string => {
 export default function CartPage() {
   const [cart, setCart] = useState<CartSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
-  const [pendingLines, setPendingLines] = useState<Set<number>>(new Set()); // disable +/– while in-flight
+  const [pendingLines, setPendingLines] = useState<Set<number>>(new Set());
   const [clearing, setClearing] = useState(false);
 
   const router = useRouter();
-  const { refreshCart, setCartCount } = useCart();
+  const { setCartCount } = useCart(); // ❗️no refreshCart here
 
   const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
 
-  // Initial fetch
+  // Initial fetch (one-time read model)
   useEffect(() => {
     const fetchCart = async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
+      const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
         router.push("/auth");
         return;
@@ -95,14 +93,7 @@ export default function CartPage() {
         setCartCount(data.totalItems ?? 0);
       } catch (e) {
         console.error(e);
-        setCart({
-          id: null,
-          userId: "",
-          totalItems: 0,
-          totalAmount: 0,
-          createdAt: null,
-          items: [],
-        });
+        setCart({ id: null, userId: "", totalItems: 0, totalAmount: 0, createdAt: null, items: [] });
         setCartCount(0);
       } finally {
         setLoading(false);
@@ -130,7 +121,7 @@ export default function CartPage() {
     });
   };
 
-  // Immediate update on +/– (PATCH /api/cart/update with lineId)
+  // PATCH /api/cart/update — set quantity (0 = delete)
   const updateQuantity = useCallback(
     async (lineId: number, newQty: number) => {
       if (!cart || newQty < 0 || pendingLines.has(lineId)) return;
@@ -154,17 +145,15 @@ export default function CartPage() {
         });
         if (!res.ok) throw new Error("update failed");
         const data = await res.json();
-        // Accept full snapshot if provided, else merge totals
-        if (data?.items) {
+
+        // Merge minimal server truth
+        if (data?.totals) {
+          setCart((c) => (c ? { ...c, totalItems: data.totals.totalItems, totalAmount: data.totals.totalAmount } : c));
+          setCartCount(data.totals.totalItems ?? totalItems);
+        } else if (data?.items) {
           setCart(data as CartSnapshot);
           setCartCount((data as CartSnapshot).totalItems ?? totalItems);
-        } else if (data?.totals) {
-          setCart((c) =>
-            c ? { ...c, totalItems: data.totals.totalItems, totalAmount: data.totals.totalAmount } : c
-          );
-          setCartCount(data.totals.totalItems ?? totalItems);
         }
-        refreshCart();
       } catch (e) {
         console.warn("❌ Failed to update cart, reverting", e);
         setCart(prev);
@@ -173,10 +162,10 @@ export default function CartPage() {
         setLinePending(lineId, false);
       }
     },
-    [cart, pendingLines, refreshCart, setCartCount]
+    [cart, pendingLines, setCartCount]
   );
 
-  // Remove a line (POST /api/cart/remove)
+  // POST /api/cart/remove — remove line
   const removeLine = useCallback(
     async (lineId: number) => {
       if (!cart || pendingLines.has(lineId)) return;
@@ -196,16 +185,14 @@ export default function CartPage() {
         });
         if (!res.ok) throw new Error("remove failed");
         const data = await res.json();
-        if (data?.items) {
+
+        if (data?.totals) {
+          setCart((c) => (c ? { ...c, totalItems: data.totals.totalItems, totalAmount: data.totals.totalAmount } : c));
+          setCartCount(data.totals.totalItems ?? totalItems);
+        } else if (data?.items) {
           setCart(data as CartSnapshot);
           setCartCount((data as CartSnapshot).totalItems ?? totalItems);
-        } else if (data?.totals) {
-          setCart((c) =>
-            c ? { ...c, totalItems: data.totals.totalItems, totalAmount: data.totals.totalAmount } : c
-          );
-          setCartCount(data.totals.totalItems ?? totalItems);
         }
-        refreshCart();
       } catch (e) {
         console.warn("❌ Failed to remove line, reverting", e);
         setCart(prev);
@@ -214,10 +201,10 @@ export default function CartPage() {
         setLinePending(lineId, false);
       }
     },
-    [cart, pendingLines, refreshCart, setCartCount]
+    [cart, pendingLines, setCartCount]
   );
 
-  // Clear cart (DELETE /api/cart)
+  // DELETE /api/cart — clear all
   const clearCart = useCallback(async () => {
     if (!cart || cart.items.length === 0 || clearing) return;
 
@@ -232,16 +219,16 @@ export default function CartPage() {
       const res = await fetch("/api/cart", { method: "DELETE" });
       if (!res.ok) throw new Error("clear failed");
       const data = await res.json();
-      if (data?.items) {
-        setCart(data as CartSnapshot);
-        setCartCount((data as CartSnapshot).totalItems ?? 0);
-      } else if (data?.totals) {
+
+      if (data?.totals) {
         setCart((c) =>
           c ? { ...c, totalItems: data.totals.totalItems, totalAmount: data.totals.totalAmount, items: [] } : c
         );
         setCartCount(data.totals.totalItems ?? 0);
+      } else if (data?.items) {
+        setCart(data as CartSnapshot);
+        setCartCount((data as CartSnapshot).totalItems ?? 0);
       }
-      refreshCart();
     } catch (e) {
       console.warn("❌ Failed to clear cart, reverting", e);
       setCart(prev);
@@ -249,9 +236,9 @@ export default function CartPage() {
     } finally {
       setClearing(false);
     }
-  }, [cart, clearing, refreshCart, setCartCount]);
+  }, [cart, clearing, setCartCount]);
 
-  // Checkout
+  // Checkout (unchanged)
   const handleCheckout = async () => {
     const res = await fetch("/api/orders", { method: "POST" });
     if (res.ok) {
@@ -313,7 +300,7 @@ export default function CartPage() {
               const img = item.productImageUrl ?? item.product?.imageUrl ?? null;
               const unit = item.unitPrice ?? item.variant?.price ?? item.product?.price ?? 0;
 
-              // ✅ Safe attributes rendering
+              // Safe attributes rendering for any shape
               const attrs =
                 item.variantAttributes != null
                   ? formatAnyAttrs(item.variantAttributes)

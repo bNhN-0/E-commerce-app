@@ -1,86 +1,125 @@
 // app/api/cart/add/route.ts
-import { NextResponse } from 'next/server';
-import { prismaDirect } from '@/lib/prisma';
-import { getUserSessionLite } from '@/lib/auth-lite';
+import { NextResponse } from "next/server";
+import { prismaDirect, prisma as prismaPooled } from "@/lib/prisma";
+import { getUserSessionLite } from "@/lib/auth-lite";
 
-export const runtime = 'nodejs';
+export const runtime = "nodejs";
+
+type Client = typeof prismaDirect;
+
+async function hasSnapshotColumns(client: Client): Promise<boolean> {
+  // Detect if "productName" exists on CartItem in the current DB
+  const rows = await client.$queryRaw<{ exists: boolean }[]>`
+    SELECT EXISTS (
+      SELECT 1
+      FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'CartItem'
+        AND column_name = 'productName'
+    ) AS "exists";
+  `;
+  return rows?.[0]?.exists === true;
+}
 
 export async function POST(req: Request) {
-  const user = await getUserSessionLite(); // ✅ now uses awaited cookies + @supabase/ssr
-  if (!user) return NextResponse.json({ error: 'Not logged in' }, { status: 401 });
+  const user = await getUserSessionLite();
+  if (!user) return NextResponse.json({ error: "Not logged in" }, { status: 401 });
 
   try {
     const body = await req.json();
     const productId = Number(body.productId);
-    const variantId = body.variantId != null ? Number(body.variantId) : null;
+    const variantId: number | null = body.variantId != null ? Number(body.variantId) : null;
     const qty = Number(body.qty ?? body.quantity ?? 1);
 
     if (!Number.isFinite(productId) || productId <= 0)
-      return NextResponse.json({ error: 'Invalid productId' }, { status: 400 });
+      return NextResponse.json({ error: "Invalid productId" }, { status: 400 });
     if (!Number.isFinite(qty) || qty <= 0)
-      return NextResponse.json({ error: 'qty must be > 0' }, { status: 400 });
+      return NextResponse.json({ error: "qty must be > 0" }, { status: 400 });
     if (variantId !== null && !Number.isFinite(variantId))
-      return NextResponse.json({ error: 'Invalid variantId' }, { status: 400 });
+      return NextResponse.json({ error: "Invalid variantId" }, { status: 400 });
 
-    const result = await prismaDirect.$transaction(async (tx) => {
-      // ensure cart
-      let cart = await tx.cart.findFirst({
+    const run = async (client: Client) => {
+      const useSnapshots = await hasSnapshotColumns(client);
+
+      // 1) ensure one cart per user (Cart.userId is unique in your schema)
+      let cart = await client.cart.findFirst({
         where: { userId: user.id },
-        select: { id: true, totalItems: true, totalAmount: true },
+        select: { id: true },
       });
       if (!cart) {
-        cart = await tx.cart.create({
-          data: { userId: user.id },
-          select: { id: true, totalItems: true, totalAmount: true },
-        });
+        try {
+          cart = await client.cart.create({ data: { userId: user.id }, select: { id: true } });
+        } catch {
+          cart = await client.cart.findFirst({ where: { userId: user.id }, select: { id: true } });
+          if (!cart) throw new Error("CART_CREATE_FAILED");
+        }
       }
 
-      // resolve unit price
-      let unitPrice: number;
+      // 2) pricing
+      const product = await client.product.findUnique({
+        where: { id: productId },
+        select: { id: true, name: true, price: true, imageUrl: true, currency: true },
+      });
+      if (!product) return NextResponse.json({ error: "Product not found" }, { status: 404 });
+
+      let unitPrice = product.price;
+      let variantSku: string | null = null;
+      let variantAttributes: any = null;
+
       if (variantId !== null) {
-        const v = await tx.productVariant.findFirst({
+        const variant = await client.productVariant.findFirst({
           where: { id: variantId, productId },
-          select: { price: true, product: { select: { price: true } } },
+          select: { id: true, sku: true, price: true, attributes: true },
         });
-        if (!v) throw new Error('VARIANT_NOT_FOUND');
-        unitPrice = (v.price ?? v.product.price) ?? 0;
-      } else {
-        const p = await tx.product.findUnique({
-          where: { id: productId },
-          select: { price: true },
-        });
-        if (!p) throw new Error('PRODUCT_NOT_FOUND');
-        unitPrice = p.price ?? 0;
+        if (!variant) {
+          return NextResponse.json({ error: "Variant not found for this product" }, { status: 400 });
+        }
+        variantSku = variant.sku;
+        variantAttributes = variant.attributes ?? null;
+        unitPrice = variant.price ?? product.price;
       }
 
-      // upsert line
-      const existing = await tx.cartItem.findFirst({
+      // 3) create-or-increment line
+      let line = await client.cartItem.findFirst({
         where: { cartId: cart.id, productId, variantId: variantId ?? null },
-        select: { id: true, quantity: true },
+        select: { id: true, quantity: true, productId: true, variantId: true },
       });
 
-      let lineId: number;
-      let newQuantity: number;
-
-      if (existing) {
-        const updated = await tx.cartItem.update({
-          where: { id: existing.id },
+      if (line) {
+        line = await client.cartItem.update({
+          where: { id: line.id },
           data: { quantity: { increment: qty } },
-          select: { id: true, quantity: true },
+          select: { id: true, quantity: true, productId: true, variantId: true },
         });
-        lineId = updated.id;
-        newQuantity = updated.quantity;
       } else {
-        const created = await tx.cartItem.create({
-          data: { cartId: cart.id, productId, variantId: variantId ?? null, quantity: qty },
-          select: { id: true, quantity: true },
-        });
-        lineId = created.id;
-        newQuantity = created.quantity;
+        if (useSnapshots) {
+          // DB has snapshot columns → write them
+          line = await client.cartItem.create({
+            data: {
+              cartId: cart.id,
+              productId,
+              variantId,
+              quantity: qty,
+              productName: product.name,
+              productImageUrl: product.imageUrl ?? null,
+              unitPrice,
+              currency: product.currency ?? "USD",
+              variantSku,
+              variantAttributes,
+            },
+            select: { id: true, quantity: true, productId: true, variantId: true },
+          });
+        } else {
+          // DB does NOT have snapshot columns → create only base fields
+          line = await client.cartItem.create({
+            data: { cartId: cart.id, productId, variantId, quantity: qty } as any,
+            select: { id: true, quantity: true, productId: true, variantId: true },
+          });
+        }
       }
 
-      // update totals
-      const totals = await tx.cart.update({
+      // 4) totals (sum of quantities)
+      const totals = await client.cart.update({
         where: { id: cart.id },
         data: {
           totalItems: { increment: qty },
@@ -89,22 +128,20 @@ export async function POST(req: Request) {
         select: { id: true, totalItems: true, totalAmount: true },
       });
 
-      return {
-        ok: true,
-        line: { id: lineId, productId, variantId, quantity: newQuantity, unitPrice },
-        totals,
-      };
-    });
+      return NextResponse.json(
+        { ok: true, totals, line: { ...line, unitPrice } },
+        { status: 201, headers: { "Cache-Control": "no-store" } }
+      );
+    };
 
-    return NextResponse.json(result, { status: 201, headers: { 'Cache-Control': 'no-store' } });
-  } catch (err: any) {
-    if (err?.message === 'PRODUCT_NOT_FOUND') {
-      return NextResponse.json({ error: 'Product not found' }, { status: 404 });
+    try {
+      return await run(prismaDirect);
+    } catch {
+      // fallback if DIRECT_URL is briefly unavailable
+      return await run(prismaPooled);
     }
-    if (err?.message === 'VARIANT_NOT_FOUND') {
-      return NextResponse.json({ error: 'Variant not found for this product' }, { status: 400 });
-    }
-    console.error('POST /api/cart/add failed', err);
-    return NextResponse.json({ error: 'Failed to add to cart' }, { status: 500 });
+  } catch (err) {
+    console.error("POST /api/cart/add failed", err);
+    return NextResponse.json({ error: "Failed to add to cart" }, { status: 500 });
   }
 }
