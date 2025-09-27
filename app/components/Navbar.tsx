@@ -13,7 +13,10 @@ import Searchbar from "./SearchBar";
 export default function Navbar() {
   const [user, setUser] = useState<User | null>(null);
   const [isOpen, setIsOpen] = useState(false);
-  const { cartCount } = useCart();
+
+  const cartCtx = useCart() as any;
+  const badgeCount: number =
+    (typeof cartCtx?.cartQty === "number" ? cartCtx.cartQty : cartCtx?.cartCount) ?? 0;
 
   // Auth state
   useEffect(() => {
@@ -66,9 +69,9 @@ export default function Navbar() {
           <Link href="/cart" className="relative flex items-center gap-1.5 hover:text-gray-200">
             <Image src={assets.cart_icon} alt="Cart" width={18} height={18} />
             <span>Cart</span>
-            {cartCount > 0 && (
+            {badgeCount > 0 && (
               <span className="absolute -top-2 -right-3 bg-red-500 text-white text-[10px] font-bold rounded-full px-1">
-                {cartCount}
+                {badgeCount}
               </span>
             )}
           </Link>
@@ -134,9 +137,9 @@ export default function Navbar() {
             <Link href="/cart" onClick={() => setIsOpen(false)} className="relative flex items-center gap-2">
               <Image src={assets.cart_icon} alt="Cart" width={20} height={20} />
               <span>Cart</span>
-              {cartCount > 0 && (
+              {badgeCount > 0 && (
                 <span className="absolute -top-2 -right-3 bg-red-500 text-white text-[10px] font-bold rounded-full px-1">
-                  {cartCount}
+                  {badgeCount}
                 </span>
               )}
             </Link>

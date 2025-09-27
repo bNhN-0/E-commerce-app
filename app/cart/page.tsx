@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { useCart } from "../components/CartContext";
@@ -11,12 +11,12 @@ type VariantAttributes =
   | null;
 
 type CartItem = {
-  id: number; // cart line id
+  id: number;
   quantity: number;
   productId?: number;
   variantId?: number | null;
 
-  // snapshot fields (server may return these)
+  // snapshots (optional)
   productName?: string;
   productImageUrl?: string | null;
   unitPrice?: number | null;
@@ -24,7 +24,7 @@ type CartItem = {
   variantSku?: string | null;
   variantAttributes?: VariantAttributes;
 
-  // legacy relations (fallbacks)
+  // fallbacks
   product?: { id: number; name: string; price: number; imageUrl?: string | null };
   variant?: {
     id: number;
@@ -37,13 +37,13 @@ type CartItem = {
 type CartSnapshot = {
   id: number | null;
   userId: string;
-  totalItems: number;
+  totalItems: number;   // DISTINCT count (lines)
   totalAmount: number;
   createdAt: string | null;
   items: CartItem[];
 };
 
-// Safe formatter that handles array/object/null/primitive
+// util: format attributes safely
 const formatAnyAttrs = (attrs: unknown): string => {
   if (!attrs) return "";
   if (Array.isArray(attrs)) {
@@ -66,6 +66,14 @@ const formatAnyAttrs = (attrs: unknown): string => {
   return String(attrs);
 };
 
+// local helpers
+const sumQty = (items: CartItem[]) => items.reduce((s, i) => s + i.quantity, 0);
+const sumAmount = (items: CartItem[]) =>
+  items.reduce((s, i) => {
+    const unit = i.unitPrice ?? i.variant?.price ?? i.product?.price ?? 0;
+    return s + unit * i.quantity;
+  }, 0);
+
 export default function CartPage() {
   const [cart, setCart] = useState<CartSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
@@ -73,14 +81,24 @@ export default function CartPage() {
   const [clearing, setClearing] = useState(false);
 
   const router = useRouter();
-  const { setCartCount } = useCart(); // ❗️no refreshCart here
 
-  const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
+  // CartContext — prefer applyTotals (distinct count), fallback to setCartCount
+  const cartCtx = useCart() as any;
+  const applyTotals: undefined | ((t: { totalItems?: number; totalAmount?: number; qty?: number }) => void) =
+    cartCtx?.applyTotals;
+  const setCartCount: undefined | ((n: number) => void) = cartCtx?.setCartCount;
 
-  // Initial fetch (one-time read model)
+  const money = useMemo(
+    () => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }),
+    []
+  );
+
+  // Initial fetch (hydrate page + navbar badge with DISTINCT count from server)
   useEffect(() => {
     const fetchCart = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       if (!user) {
         router.push("/auth");
         return;
@@ -89,28 +107,31 @@ export default function CartPage() {
         const res = await fetch("/api/cart", { cache: "no-store" });
         if (!res.ok) throw new Error("Failed to fetch cart");
         const data: CartSnapshot = await res.json();
+
         setCart(data);
-        setCartCount(data.totalItems ?? 0);
+
+        const qty = sumQty(data.items);
+        if (applyTotals) applyTotals({ totalItems: data.totalItems, totalAmount: data.totalAmount, qty });
+        else if (setCartCount) setCartCount(data.totalItems ?? 0);
       } catch (e) {
         console.error(e);
-        setCart({ id: null, userId: "", totalItems: 0, totalAmount: 0, createdAt: null, items: [] });
-        setCartCount(0);
+        const empty: CartSnapshot = {
+          id: null,
+          userId: "",
+          totalItems: 0,
+          totalAmount: 0,
+          createdAt: null,
+          items: [],
+        };
+        setCart(empty);
+        if (applyTotals) applyTotals({ totalItems: 0, totalAmount: 0, qty: 0 });
+        else if (setCartCount) setCartCount(0);
       } finally {
         setLoading(false);
       }
     };
     fetchCart();
-  }, [router, setCartCount]);
-
-  // Helpers
-  const recomputeTotals = (items: CartItem[]) => {
-    const totalItems = items.reduce((s, i) => s + i.quantity, 0);
-    const totalAmount = items.reduce((s, i) => {
-      const unit = i.unitPrice ?? i.variant?.price ?? i.product?.price ?? 0;
-      return s + unit * i.quantity;
-    }, 0);
-    return { totalItems, totalAmount };
-  };
+  }, [router, applyTotals, setCartCount]);
 
   const setLinePending = (lineId: number, on: boolean) => {
     setPendingLines((prev) => {
@@ -127,14 +148,25 @@ export default function CartPage() {
       if (!cart || newQty < 0 || pendingLines.has(lineId)) return;
 
       const prev = structuredClone(cart);
+      const target = cart.items.find((i) => i.id === lineId);
+      if (!target) return;
 
-      // optimistic UI
+      // optimistic items
       const nextItems = cart.items
         .map((i) => (i.id === lineId ? { ...i, quantity: newQty } : i))
         .filter((i) => i.quantity > 0);
-      const { totalItems, totalAmount } = recomputeTotals(nextItems);
-      setCart({ ...cart, items: nextItems, totalItems, totalAmount });
-      setCartCount(totalItems);
+
+      // recompute amounts + DISTINCT count locally
+      const localAmount = sumAmount(nextItems);
+      const localDistinct = nextItems.length;
+      const localQty = sumQty(nextItems);
+
+      setCart({ ...cart, items: nextItems, totalAmount: localAmount, totalItems: localDistinct });
+      // Badge: DISTINCT count only changes if we removed the line (newQty === 0)
+      if (newQty === 0) {
+        if (applyTotals) applyTotals({ totalItems: localDistinct, totalAmount: localAmount, qty: localQty });
+        else if (setCartCount) setCartCount(localDistinct);
+      }
 
       setLinePending(lineId, true);
       try {
@@ -146,35 +178,50 @@ export default function CartPage() {
         if (!res.ok) throw new Error("update failed");
         const data = await res.json();
 
-        // Merge minimal server truth
         if (data?.totals) {
-          setCart((c) => (c ? { ...c, totalItems: data.totals.totalItems, totalAmount: data.totals.totalAmount } : c));
-          setCartCount(data.totals.totalItems ?? totalItems);
+          // trust server truth for badge + totals
+          if (applyTotals) applyTotals({ totalItems: data.totals.totalItems, totalAmount: data.totals.totalAmount, qty: localQty });
+          else if (setCartCount) setCartCount(data.totals.totalItems ?? localDistinct);
+
+          setCart((c) =>
+            c ? { ...c, totalItems: data.totals.totalItems, totalAmount: data.totals.totalAmount } : c
+          );
         } else if (data?.items) {
-          setCart(data as CartSnapshot);
-          setCartCount((data as CartSnapshot).totalItems ?? totalItems);
+          const snap = data as CartSnapshot;
+          const qty2 = sumQty(snap.items);
+          if (applyTotals) applyTotals({ totalItems: snap.totalItems, totalAmount: snap.totalAmount, qty: qty2 });
+          else if (setCartCount) setCartCount(snap.totalItems ?? localDistinct);
+          setCart(snap);
         }
       } catch (e) {
         console.warn("❌ Failed to update cart, reverting", e);
         setCart(prev);
-        setCartCount(prev.totalItems ?? 0);
+        const qtyPrev = sumQty(prev.items);
+        if (applyTotals) applyTotals({ totalItems: prev.totalItems, totalAmount: prev.totalAmount, qty: qtyPrev });
+        else if (setCartCount) setCartCount(prev.totalItems ?? 0);
       } finally {
         setLinePending(lineId, false);
       }
     },
-    [cart, pendingLines, setCartCount]
+    [cart, pendingLines, applyTotals, setCartCount]
   );
 
-  // POST /api/cart/remove — remove line
+  // Remove line (POST /api/cart/remove)
   const removeLine = useCallback(
     async (lineId: number) => {
       if (!cart || pendingLines.has(lineId)) return;
 
       const prev = structuredClone(cart);
       const nextItems = cart.items.filter((i) => i.id !== lineId);
-      const { totalItems, totalAmount } = recomputeTotals(nextItems);
-      setCart({ ...cart, items: nextItems, totalItems, totalAmount });
-      setCartCount(totalItems);
+
+      const localAmount = sumAmount(nextItems);
+      const localDistinct = nextItems.length;
+      const localQty = sumQty(nextItems);
+
+      // optimistic: distinct count decreases by 1
+      setCart({ ...cart, items: nextItems, totalAmount: localAmount, totalItems: localDistinct });
+      if (applyTotals) applyTotals({ totalItems: localDistinct, totalAmount: localAmount, qty: localQty });
+      else if (setCartCount) setCartCount(localDistinct);
 
       setLinePending(lineId, true);
       try {
@@ -187,33 +234,43 @@ export default function CartPage() {
         const data = await res.json();
 
         if (data?.totals) {
-          setCart((c) => (c ? { ...c, totalItems: data.totals.totalItems, totalAmount: data.totals.totalAmount } : c));
-          setCartCount(data.totals.totalItems ?? totalItems);
+          if (applyTotals) applyTotals({ totalItems: data.totals.totalItems, totalAmount: data.totals.totalAmount, qty: localQty });
+          else if (setCartCount) setCartCount(data.totals.totalItems ?? localDistinct);
+
+          setCart((c) =>
+            c ? { ...c, totalItems: data.totals.totalItems, totalAmount: data.totals.totalAmount } : c
+          );
         } else if (data?.items) {
-          setCart(data as CartSnapshot);
-          setCartCount((data as CartSnapshot).totalItems ?? totalItems);
+          const snap = data as CartSnapshot;
+          const qty2 = sumQty(snap.items);
+          if (applyTotals) applyTotals({ totalItems: snap.totalItems, totalAmount: snap.totalAmount, qty: qty2 });
+          else if (setCartCount) setCartCount(snap.totalItems ?? localDistinct);
+          setCart(snap);
         }
       } catch (e) {
         console.warn("❌ Failed to remove line, reverting", e);
         setCart(prev);
-        setCartCount(prev.totalItems ?? 0);
+        const qtyPrev = sumQty(prev.items);
+        if (applyTotals) applyTotals({ totalItems: prev.totalItems, totalAmount: prev.totalAmount, qty: qtyPrev });
+        else if (setCartCount) setCartCount(prev.totalItems ?? 0);
       } finally {
         setLinePending(lineId, false);
       }
     },
-    [cart, pendingLines, setCartCount]
+    [cart, pendingLines, applyTotals, setCartCount]
   );
 
-  // DELETE /api/cart — clear all
+  // Clear cart (DELETE /api/cart)
   const clearCart = useCallback(async () => {
     if (!cart || cart.items.length === 0 || clearing) return;
 
     const prev = structuredClone(cart);
     setClearing(true);
 
-    // optimistic
+    // optimistic clear
     setCart({ ...cart, items: [], totalItems: 0, totalAmount: 0 });
-    setCartCount(0);
+    if (applyTotals) applyTotals({ totalItems: 0, totalAmount: 0, qty: 0 });
+    else if (setCartCount) setCartCount(0);
 
     try {
       const res = await fetch("/api/cart", { method: "DELETE" });
@@ -221,30 +278,37 @@ export default function CartPage() {
       const data = await res.json();
 
       if (data?.totals) {
+        if (applyTotals) applyTotals({ totalItems: data.totals.totalItems, totalAmount: data.totals.totalAmount, qty: 0 });
+        else if (setCartCount) setCartCount(data.totals.totalItems ?? 0);
+
         setCart((c) =>
           c ? { ...c, totalItems: data.totals.totalItems, totalAmount: data.totals.totalAmount, items: [] } : c
         );
-        setCartCount(data.totals.totalItems ?? 0);
       } else if (data?.items) {
-        setCart(data as CartSnapshot);
-        setCartCount((data as CartSnapshot).totalItems ?? 0);
+        const snap = data as CartSnapshot;
+        if (applyTotals) applyTotals({ totalItems: snap.totalItems, totalAmount: snap.totalAmount, qty: 0 });
+        else if (setCartCount) setCartCount(snap.totalItems ?? 0);
+        setCart(snap);
       }
     } catch (e) {
       console.warn("❌ Failed to clear cart, reverting", e);
       setCart(prev);
-      setCartCount(prev.totalItems ?? 0);
+      const qtyPrev = sumQty(prev.items);
+      if (applyTotals) applyTotals({ totalItems: prev.totalItems, totalAmount: prev.totalAmount, qty: qtyPrev });
+      else if (setCartCount) setCartCount(prev.totalItems ?? 0);
     } finally {
       setClearing(false);
     }
-  }, [cart, clearing, setCartCount]);
+  }, [cart, clearing, applyTotals, setCartCount]);
 
-  // Checkout (unchanged)
+  // Checkout
   const handleCheckout = async () => {
     const res = await fetch("/api/orders", { method: "POST" });
     if (res.ok) {
       alert("✅ Order placed!");
-      setCartCount(0);
       setCart((c) => (c ? { ...c, items: [], totalItems: 0, totalAmount: 0 } : c));
+      if (applyTotals) applyTotals({ totalItems: 0, totalAmount: 0, qty: 0 });
+      else if (setCartCount) setCartCount(0);
       router.push("/orders");
     } else {
       const error = await res.json();
@@ -262,10 +326,7 @@ export default function CartPage() {
 
   const total =
     cart?.totalAmount ??
-    cart?.items.reduce((sum, item) => {
-      const unit = item.unitPrice ?? item.variant?.price ?? item.product?.price ?? 0;
-      return sum + item.quantity * unit;
-    }, 0) ??
+    sumAmount(cart?.items ?? []) ??
     0;
 
   return (
@@ -300,7 +361,6 @@ export default function CartPage() {
               const img = item.productImageUrl ?? item.product?.imageUrl ?? null;
               const unit = item.unitPrice ?? item.variant?.price ?? item.product?.price ?? 0;
 
-              // Safe attributes rendering for any shape
               const attrs =
                 item.variantAttributes != null
                   ? formatAnyAttrs(item.variantAttributes)

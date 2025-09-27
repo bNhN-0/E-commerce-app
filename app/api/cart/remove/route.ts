@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
-import { prisma, prismaDirect } from "@/lib/prisma";
+import { prisma as prismaPooled, prismaDirect } from "@/lib/prisma";
 import { getUserSessionLite } from "@/lib/auth-lite";
 
 export const runtime = "nodejs";
+
+type Client = typeof prismaPooled;
 
 export async function POST(req: Request) {
   const user = await getUserSessionLite();
@@ -10,33 +12,29 @@ export async function POST(req: Request) {
 
   try {
     const { lineId } = await req.json();
-    const lineID = Number(lineId);
-    if (!Number.isFinite(lineID) || lineID <= 0) {
+    const id = Number(lineId);
+    if (!Number.isFinite(id) || id <= 0) {
       return NextResponse.json({ error: "Invalid lineId" }, { status: 400 });
     }
 
-    const runTx = async (client: typeof prisma) =>
+    const runTx = async (client: Client) =>
       client.$transaction(async (tx) => {
-        // load line and guard ownership
         const line = await tx.cartItem.findUnique({
-          where: { id: lineID },
+          where: { id },
           select: {
             id: true,
             cartId: true,
             productId: true,
             variantId: true,
             quantity: true,
-            cart: { select: { id: true, userId: true } },
+            unitPrice: true,                 // snapshot if present
+            cart: { select: { userId: true } },
           },
         });
-        if (!line || line.cart.userId !== user.id) {
-          throw new Error("LINE_NOT_FOUND");
-        }
+        if (!line || line.cart.userId !== user.id) throw new Error("LINE_NOT_FOUND");
 
-        // unit price (snapshot preferred if present)
-        let unitPrice: number | null = null;
-        // unitPrice = line.unitPrice ?? null;
-
+        // resolve price if snapshot missing
+        let unitPrice = line.unitPrice as number | null;
         if (unitPrice == null) {
           if (line.variantId != null) {
             const v = await tx.productVariant.findUnique({
@@ -44,52 +42,43 @@ export async function POST(req: Request) {
               select: { price: true, productId: true },
             });
             if (!v || v.productId !== line.productId) throw new Error("VARIANT_NOT_FOUND");
-            if (v.price != null) unitPrice = v.price;
+            unitPrice = v.price ?? null;
           }
           if (unitPrice == null) {
-            const p = await tx.product.findUnique({
-              where: { id: line.productId },
-              select: { price: true },
-            });
+            const p = await tx.product.findUnique({ where: { id: line.productId }, select: { price: true } });
             if (!p) throw new Error("PRODUCT_NOT_FOUND");
             unitPrice = p.price;
           }
         }
 
+        // delete line
         await tx.cartItem.delete({ where: { id: line.id } });
 
+        // totals: items -= 1 (distinct), amount -= unitPrice * oldQty
         const totals = await tx.cart.update({
           where: { id: line.cartId },
           data: {
-            totalItems: { decrement: line.quantity },
+            totalItems: { decrement: 1 },
             totalAmount: { decrement: unitPrice * line.quantity },
           },
           select: { id: true, totalItems: true, totalAmount: true },
         });
 
-        return { totals, removed: line.id };
+        return { ok: true, removed: line.id, totals, meta: { deltaLines: -1 } };
       });
 
-    let result;
     try {
-      result = await runTx(prismaDirect);
-    } catch (e: any) {
-      if (e?.code === "P1001" || String(e?.message || "").includes("Can't reach database")) {
-        result = await runTx(prisma);
-      } else {
-        throw e;
-      }
+      return NextResponse.json(await runTx(prismaDirect), { headers: { "Cache-Control": "no-store" } });
+    } catch {
+      return NextResponse.json(await runTx(prismaPooled), { headers: { "Cache-Control": "no-store" } });
     }
-
-    return NextResponse.json(result, { headers: { "Cache-Control": "no-store" } });
   } catch (err: any) {
-    if (err?.message === "LINE_NOT_FOUND") {
+    if (err?.message === "LINE_NOT_FOUND")
       return NextResponse.json({ error: "Cart line not found" }, { status: 404 });
-    }
-    if (err?.message === "PRODUCT_NOT_FOUND" || err?.message === "VARIANT_NOT_FOUND") {
+    if (err?.message === "PRODUCT_NOT_FOUND" || err?.message === "VARIANT_NOT_FOUND")
       return NextResponse.json({ error: "Product/Variant not found" }, { status: 400 });
-    }
+
     console.error("POST /api/cart/remove failed", err);
-    return NextResponse.json({ error: "Failed to remove item" }, { status: 500 });
+    return NextResponse.json({ error: "Failed to remove line" }, { status: 500 });
   }
 }

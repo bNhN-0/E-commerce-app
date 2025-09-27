@@ -1,10 +1,12 @@
 "use client";
 
-import { createContext, useContext, useState, useEffect } from "react";
+import { createContext, useContext, useState, useEffect, useCallback } from "react";
+
+type Totals = { totalItems?: number; totalAmount?: number };
 
 type CartContextType = {
   cartCount: number;
-  setCartCount: (count: number) => void;
+  applyTotals: (totals?: Totals) => void;
   refreshCart: () => Promise<void>;
 };
 
@@ -13,23 +15,39 @@ const CartContext = createContext<CartContextType | null>(null);
 export function CartProvider({ children }: { children: React.ReactNode }) {
   const [cartCount, setCartCount] = useState(0);
 
-  const refreshCart = async () => {
-    try {
-      const res = await fetch("/api/cart");
-      const data = await res.json();
-      setCartCount(data?.items?.length || 0); 
-    } catch (err) {
-      console.error("Failed to fetch cart", err);
+  const applyTotals = useCallback((totals?: Totals) => {
+    if (totals && typeof totals.totalItems === "number") {
+      setCartCount(totals.totalItems);
     }
-  };
-
-  // Fetch cart on mount
-  useEffect(() => {
-    refreshCart();
   }, []);
 
+  const refreshCart = useCallback(async () => {
+    try {
+      const res = await fetch("/api/cart", { cache: "no-store" });
+      if (!res.ok) {
+        setCartCount(0);
+        return;
+      }
+      const data = await res.json();
+      if (typeof data?.totalItems === "number") {
+        setCartCount(data.totalItems);
+      } else if (Array.isArray(data?.items)) {
+        setCartCount(data.items.length);
+      } else {
+        setCartCount(0);
+      }
+    } catch (err) {
+      console.error("Failed to fetch cart", err);
+      setCartCount(0);
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshCart();
+  }, [refreshCart]);
+
   return (
-    <CartContext.Provider value={{ cartCount, setCartCount, refreshCart }}>
+    <CartContext.Provider value={{ cartCount, applyTotals, refreshCart }}>
       {children}
     </CartContext.Provider>
   );

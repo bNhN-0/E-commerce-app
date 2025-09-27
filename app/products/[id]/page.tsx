@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 import { useCart } from "@/app/components/CartContext";
@@ -15,7 +15,7 @@ type Variant = {
   sku: string;
   price?: number | null;
   stock: number;
-  attributes?: VariantAttributes; // supports both shapes
+  attributes?: VariantAttributes;
 };
 
 type Product = {
@@ -35,7 +35,9 @@ export default function ProductDetailPage() {
   const [user, setUser] = useState<any>(null);
   const [selectedVariant, setSelectedVariant] = useState<Variant | null>(null);
   const [adding, setAdding] = useState(false);
-  const { setCartCount } = useCart();
+
+  // from CartContext: we now set the badge via server-returned totals
+  const { applyTotals } = useCart();
 
   const money = useMemo(
     () => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }),
@@ -90,14 +92,11 @@ export default function ProductDetailPage() {
     if (adding) return;
     setAdding(true);
 
-    // optimistic badge +1
-    setCartCount((product?.variants && selectedVariant ? 1 : 1));
-
     try {
       const body =
         selectedVariant && selectedVariant.id
-          ? { productId: product.id, variantId: selectedVariant.id, qty: 1, quantity: 1 }
-          : { productId: product.id, qty: 1, quantity: 1 };
+          ? { productId: product.id, variantId: selectedVariant.id, qty: 1 }
+          : { productId: product.id, qty: 1 };
 
       const res = await fetch("/api/cart/add", {
         method: "POST",
@@ -112,14 +111,12 @@ export default function ProductDetailPage() {
       }
 
       const data = await res.json(); // { ok, line, totals }
-      if (data?.totals?.totalItems != null) {
-        setCartCount(data.totals.totalItems); // sync to server truth
-      }
-      // optional toast here: “Added to cart”
+      // Drive navbar badge from server truth (distinct item count)
+      if (data?.totals) applyTotals(data.totals);
+
+      // optional: toast “Added to cart”
     } catch (error: any) {
       console.error(error);
-      // rollback optimistic bump
-      setCartCount(0);
       alert(error?.message || "Something went wrong.");
     } finally {
       setAdding(false);
@@ -144,9 +141,7 @@ export default function ProductDetailPage() {
       <p className="text-2xl font-semibold mb-2">
         {money.format(effectivePrice)}
       </p>
-      <p className="text-sm text-gray-500 mb-4">
-        Stock: {effectiveStock}
-      </p>
+      <p className="text-sm text-gray-500 mb-4">Stock: {effectiveStock}</p>
 
       {/* Variants */}
       {product.variants && product.variants.length > 0 && (

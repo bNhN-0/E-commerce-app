@@ -1,9 +1,11 @@
 // app/api/cart/update/route.ts
 import { NextResponse } from "next/server";
-import { prisma, prismaDirect } from "@/lib/prisma";
+import { prisma as prismaPooled, prismaDirect } from "@/lib/prisma";
 import { getUserSessionLite } from "@/lib/auth-lite";
 
 export const runtime = "nodejs";
+
+type Client = typeof prismaPooled;
 
 export async function PATCH(req: Request) {
   const user = await getUserSessionLite();
@@ -11,16 +13,19 @@ export async function PATCH(req: Request) {
 
   try {
     const { lineId, qty } = await req.json();
-    const newQty = Number(qty);
     const lineID = Number(lineId);
+    const newQty = Number(qty);
 
-    if (!Number.isFinite(lineID) || lineID <= 0)
+    if (!Number.isFinite(lineID) || lineID <= 0) {
       return NextResponse.json({ error: "Invalid lineId" }, { status: 400 });
-    if (!Number.isFinite(newQty) || newQty < 0)
+    }
+    if (!Number.isFinite(newQty) || newQty < 0) {
       return NextResponse.json({ error: "qty must be >= 0" }, { status: 400 });
+    }
 
-    const runTx = async (client: typeof prisma) =>
+    const runTx = async (client: Client) =>
       client.$transaction(async (tx) => {
+        // Fetch line (and owner guard)
         const line = await tx.cartItem.findUnique({
           where: { id: lineID },
           select: {
@@ -29,12 +34,17 @@ export async function PATCH(req: Request) {
             productId: true,
             variantId: true,
             quantity: true,
-            unitPrice: true, 
-            cart: { select: { id: true, userId: true } },
+            // snapshot price if your DB has it; harmless if column exists
+            unitPrice: true,
+            cart: { select: { userId: true } },
           },
         });
-        if (!line || line.cart.userId !== user.id) throw new Error("LINE_NOT_FOUND");
 
+        if (!line || line.cart.userId !== user.id) {
+          throw new Error("LINE_NOT_FOUND");
+        }
+
+        // Resolve unitPrice: prefer snapshot, fall back to variant/product
         let unitPrice: number | null = line.unitPrice ?? null;
 
         if (unitPrice == null) {
@@ -58,36 +68,35 @@ export async function PATCH(req: Request) {
 
         const oldQty = line.quantity;
 
-        // No change
+        // No-op
         if (newQty === oldQty) {
           const totals = await tx.cart.findUnique({
             where: { id: line.cartId },
             select: { id: true, totalItems: true, totalAmount: true },
           });
-          return { totals };
+          return { totals, line: { id: line.id, quantity: oldQty, unitPrice }, meta: { deltaLines: 0 } };
         }
 
+        // Remove line when qty -> 0  (distinct count -1)
         if (newQty === 0) {
           await tx.cartItem.delete({ where: { id: line.id } });
 
-          const amountDelta = unitPrice * oldQty; 
+          const amountDelta = unitPrice * oldQty; // subtract whole previous line value
           const totals = await tx.cart.update({
             where: { id: line.cartId },
             data: {
-              totalItems: { decrement: 1 }, 
-              totalAmount: { decrement: amountDelta },
+              totalItems: { decrement: 1 },         // distinct items count
+              totalAmount: { decrement: amountDelta }
             },
             select: { id: true, totalItems: true, totalAmount: true },
           });
 
-          return { totals, removed: line.id };
+          return { totals, removed: line.id, meta: { deltaLines: -1 } };
         }
 
+        // Update qty (distinct count unchanged)
         const deltaQty = newQty - oldQty;
-        await tx.cartItem.update({
-          where: { id: line.id },
-          data: { quantity: newQty },
-        });
+        await tx.cartItem.update({ where: { id: line.id }, data: { quantity: newQty } });
 
         const amountDelta = unitPrice * deltaQty;
         const totals = await tx.cart.update({
@@ -101,21 +110,17 @@ export async function PATCH(req: Request) {
 
         return {
           totals,
-          line: {
-            id: line.id,
-            quantity: newQty,
-            unitPrice,
-            productId: line.productId,
-            variantId: line.variantId,
-          },
+          line: { id: line.id, quantity: newQty, unitPrice, productId: line.productId, variantId: line.variantId },
+          meta: { deltaLines: 0 },
         };
       });
 
+    // Prefer DIRECT connection; fallback to pooled
     let result;
     try {
       result = await runTx(prismaDirect);
-    } catch (e: any) {
-      result = await runTx(prisma);
+    } catch {
+      result = await runTx(prismaPooled);
     }
 
     return NextResponse.json(result, { headers: { "Cache-Control": "no-store" } });
