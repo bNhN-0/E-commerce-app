@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 
 type Product = {
@@ -10,28 +10,63 @@ type Product = {
   stock: number;
   imageUrl?: string;
   createdAt?: string;
-  category?: {
-    id: number;
-    name: string;
-    type: string;
-  };
+  category?: { id: number; name: string; type: string };
 };
 
 export default function AdminProductsPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
-  const [sort, setSort] = useState("name");
+  const [sort, setSort] = useState<"name" | "price" | "stock">("name");
   const [filterCategory, setFilterCategory] = useState("all");
+
+  // Robustly pick an array from many possible API shapes
+  const pickArray = (d: any): any[] => {
+    if (Array.isArray(d)) return d;
+    const keys = ["products", "items", "data", "rows", "result", "list"];
+    for (const k of keys) if (Array.isArray(d?.[k])) return d[k];
+    if (Array.isArray(d?.items?.data)) return d.items.data;
+    if (Array.isArray(d?.edges)) return d.edges.map((e: any) => e?.node).filter(Boolean);
+    return [];
+  };
+
+  const normalizeProducts = (data: any): Product[] =>
+    pickArray(data).map((p: any) => ({
+      id: Number(p.id),
+      name: String(p.name ?? ""),
+      price: Number(p.price ?? 0),
+      stock: Number(p.stock ?? 0),
+      imageUrl: p.imageUrl ?? undefined,
+      createdAt: p.createdAt ?? undefined,
+      category: p.category
+        ? {
+            id: Number(p.category.id),
+            name: String(p.category.name ?? ""),
+            type: String(p.category.type ?? ""),
+          }
+        : undefined,
+    }));
 
   useEffect(() => {
     const fetchProducts = async () => {
+      setLoading(true);
+      setError(null);
       try {
-        const res = await fetch("/api/products");
-        const data = await res.json();
-        setProducts(data);
+        const res = await fetch("/api/products", { cache: "no-store" });
+        if (!res.ok) {
+          const msg = `HTTP ${res.status}`;
+          setError(msg);
+          setProducts([]);
+          return;
+        }
+        const raw = await res.json();
+        const list = normalizeProducts(raw);
+        setProducts(list);
       } catch (err) {
         console.error("Failed to fetch products:", err);
+        setError("Network/parse error");
+        setProducts([]);
       } finally {
         setLoading(false);
       }
@@ -41,50 +76,50 @@ export default function AdminProductsPage() {
 
   const handleDelete = async (id: number) => {
     if (!confirm("Are you sure you want to delete this product?")) return;
-
     const res = await fetch(`/api/products/${id}`, { method: "DELETE" });
-
     if (res.ok) {
       setProducts((prev) => prev.filter((p) => p.id !== id));
       alert("✅ Product deleted");
     } else {
-      const error = await res.json();
-      alert(`❌ ${error.error || "Failed to delete product"}`);
+      const payload = await res.json().catch(() => ({} as any));
+      alert(`❌ ${payload.error || "Failed to delete product"}`);
     }
   };
 
-  // Unique categories for filter dropdown
-  const categories = Array.from(
-    new Set(products.map((p) => p.category?.name).filter(Boolean))
-  ) as string[];
+  const categories = useMemo(() => {
+    const set = new Set<string>();
+    for (const p of products) {
+      const name = p.category?.name;
+      if (name) set.add(name);
+    }
+    return Array.from(set).sort();
+  }, [products]);
 
-  const filteredProducts = products
-    .filter((p) =>
-      p.name.toLowerCase().includes(search.toLowerCase())
-    )
-    .filter((p) =>
-      filterCategory === "all"
-        ? true
-        : p.category?.name === filterCategory
-    )
-    .sort((a, b) => {
-      if (sort === "price") return a.price - b.price;
-      if (sort === "stock") return a.stock - b.stock;
-      return a.name.localeCompare(b.name);
-    });
+  const filteredProducts = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    return products
+      .filter((p) => (term ? p.name.toLowerCase().includes(term) : true))
+      .filter((p) => (filterCategory === "all" ? true : p.category?.name === filterCategory))
+      .sort((a, b) => {
+        if (sort === "price") return a.price - b.price;
+        if (sort === "stock") return a.stock - b.stock;
+        return a.name.localeCompare(b.name);
+      });
+  }, [products, search, filterCategory, sort]);
 
   if (loading) return <p className="p-6 text-gray-500">Loading products...</p>;
 
   return (
     <div className="p-6">
-      {/* Header */}
-      <h1 className="text-2xl font-bold mb-6 text-gray-800">
-        ⚙️ Admin Panel – Products
-      </h1>
+      <h1 className="text-2xl font-bold mb-6 text-gray-800">⚙️ Admin Panel – Products</h1>
 
-      {/* Controls */}
+      {error && (
+        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
+          {error} — check your <code>/api/products</code> response shape.
+        </div>
+      )}
+
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
-        {/* Search + Sort + Filter */}
         <div className="flex gap-3 flex-1">
           <input
             type="text"
@@ -95,7 +130,7 @@ export default function AdminProductsPage() {
           />
           <select
             value={sort}
-            onChange={(e) => setSort(e.target.value)}
+            onChange={(e) => setSort(e.target.value as any)}
             className="border border-gray-300 px-4 py-2 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"
           >
             <option value="name">Sort by Name</option>
@@ -116,7 +151,6 @@ export default function AdminProductsPage() {
           </select>
         </div>
 
-        {/* Buttons */}
         <div className="flex gap-2 shrink-0">
           <Link
             href="/"
@@ -133,7 +167,6 @@ export default function AdminProductsPage() {
         </div>
       </div>
 
-      {/* Products Table */}
       {filteredProducts.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-20 text-gray-500">
           <span className="text-5xl mb-4">📦</span>
@@ -166,9 +199,7 @@ export default function AdminProductsPage() {
                       <span className="text-gray-400">—</span>
                     )}
                   </td>
-                  <td className="px-4 py-3 font-medium text-gray-800">
-                    {p.name}
-                  </td>
+                  <td className="px-4 py-3 font-medium text-gray-800">{p.name}</td>
                   <td className="px-4 py-3 text-gray-700">${p.price}</td>
                   <td className="px-4 py-3">
                     <span
@@ -183,9 +214,7 @@ export default function AdminProductsPage() {
                       {p.stock}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-blue-600">
-                    {p.category ? p.category.name : "—"}
-                  </td>
+                  <td className="px-4 py-3 text-blue-600">{p.category ? p.category.name : "—"}</td>
                   <td className="px-4 py-3 flex justify-center gap-2">
                     <Link
                       href={`/admin/products/${p.id}/edit`}

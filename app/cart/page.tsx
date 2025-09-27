@@ -151,18 +151,15 @@ export default function CartPage() {
       const target = cart.items.find((i) => i.id === lineId);
       if (!target) return;
 
-      // optimistic items
       const nextItems = cart.items
         .map((i) => (i.id === lineId ? { ...i, quantity: newQty } : i))
         .filter((i) => i.quantity > 0);
 
-      // recompute amounts + DISTINCT count locally
       const localAmount = sumAmount(nextItems);
       const localDistinct = nextItems.length;
       const localQty = sumQty(nextItems);
 
       setCart({ ...cart, items: nextItems, totalAmount: localAmount, totalItems: localDistinct });
-      // Badge: DISTINCT count only changes if we removed the line (newQty === 0)
       if (newQty === 0) {
         if (applyTotals) applyTotals({ totalItems: localDistinct, totalAmount: localAmount, qty: localQty });
         else if (setCartCount) setCartCount(localDistinct);
@@ -179,7 +176,6 @@ export default function CartPage() {
         const data = await res.json();
 
         if (data?.totals) {
-          // trust server truth for badge + totals
           if (applyTotals) applyTotals({ totalItems: data.totals.totalItems, totalAmount: data.totals.totalAmount, qty: localQty });
           else if (setCartCount) setCartCount(data.totals.totalItems ?? localDistinct);
 

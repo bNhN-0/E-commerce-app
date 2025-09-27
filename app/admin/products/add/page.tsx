@@ -3,16 +3,11 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 
-type Category = {
-  id: number;
-  name: string;
-  type: string;
-};
-
-type Variant = {
+type Category = { id: number; name: string; type: string };
+type VariantRow = {
   sku: string;
-  price: string;
-  stock: string;
+  price: string; 
+  stock: string; 
   attributes: { name: string; value: string }[];
 };
 
@@ -25,67 +20,147 @@ export default function AddProductPage() {
   const [previewUrl, setPreviewUrl] = useState("");
   const [categoryId, setCategoryId] = useState("");
   const [categories, setCategories] = useState<Category[]>([]);
-  const [variants, setVariants] = useState<Variant[]>([
-    { sku: "", price: "", stock: "", attributes: [] },
-  ]);
+  const [variants, setVariants] = useState<VariantRow[]>([]);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const router = useRouter();
+  const pickArray = (d: any): any[] => {
+    if (Array.isArray(d)) return d;
+    for (const k of ["data", "items", "rows", "list", "categories"]) {
+      if (Array.isArray(d?.[k])) return d[k];
+    }
+    return [];
+  };
 
   useEffect(() => {
-    const fetchCategories = async () => {
+    (async () => {
       try {
-        const res = await fetch("/api/categories");
-        const data = await res.json();
-        setCategories(data);
-      } catch (err) {
-        console.error("Failed to fetch categories:", err);
+        const res = await fetch("/api/categories", { cache: "no-store" });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const raw = await res.json();
+        const arr = pickArray(raw).map((c: any) => ({
+          id: Number(c.id),
+          name: String(c.name ?? ""),
+          type: String(c.type ?? ""),
+        }));
+        setCategories(arr);
+      } catch (e) {
+        console.error("Failed to fetch categories", e);
+        setCategories([]);
       }
-    };
-    fetchCategories();
+    })();
   }, []);
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setImageFile(file);
-      setPreviewUrl(URL.createObjectURL(file));
-    }
+    const file = e.target.files?.[0] || null;
+    setImageFile(file);
+    setPreviewUrl(file ? URL.createObjectURL(file) : "");
+  };
+
+  // Validate basic required fields
+  const validateCore = (): string | null => {
+    if (!name.trim()) return "Product name is required.";
+    const p = Number(price);
+    if (!Number.isFinite(p) || p < 0) return "Price must be a non-negative number.";
+    const s = Number(stock);
+    if (!Number.isInteger(s) || s < 0) return "Stock must be a non-negative integer.";
+    const cat = Number(categoryId);
+    if (!Number.isInteger(cat) || cat <= 0) return "Please select a category.";
+    return null;
+  };
+
+  const cleanVariants = () => {
+    return variants
+      .map((v) => {
+        const sku = v.sku.trim();
+        if (!sku) return null;
+
+        const vPrice =
+          v.price.trim() === "" ? null : Number(v.price);
+        const vStock =
+          v.stock.trim() === "" ? 0 : Number(v.stock);
+
+        const attrs = (v.attributes || [])
+          .map((a) => ({
+            name: (a.name ?? "").toString().trim(),
+            value: (a.value ?? "").toString().trim(),
+          }))
+          .filter((a) => a.name && a.value);
+
+        return {
+          sku,
+          price: vPrice,                 
+          stock: Number.isFinite(vStock) && vStock >= 0 ? vStock : 0,
+          attributes: attrs,              
+        };
+      })
+      .filter(Boolean) as Array<{
+      sku: string;
+      price: number | null;
+      stock: number;
+      attributes: { name: string; value: string }[];
+    }>;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError(null);
 
-    let uploadedUrl = "";
-    if (imageFile) {
-      // TODO: replace with real upload (Supabase/S3/etc.)
-      uploadedUrl = previewUrl;
+    const bad = validateCore();
+    if (bad) {
+      setError(bad);
+      return;
     }
 
-    const res = await fetch("/api/products", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name,
-        description,
-        price: parseFloat(price),
-        stock: parseInt(stock),
-        imageUrl: uploadedUrl,
-        categoryId: parseInt(categoryId),
-        variants: variants.map((v) => ({
-          sku: v.sku,
-          price: parseFloat(v.price),
-          stock: parseInt(v.stock),
-          attributes: v.attributes,
-        })),
-      }),
-    });
+    setSubmitting(true);
+    try {
+      const uploadedUrl = imageFile ? previewUrl : "";
 
-    if (res.ok) {
+      const payload: any = {
+        name: name.trim(),
+        description: description.trim() || null,
+        price: Number(price),
+        stock: Number(stock),
+        imageUrl: uploadedUrl || null,
+        categoryId: Number(categoryId),
+      };
+
+      const v = cleanVariants();
+      if (v.length > 0) payload.variants = v;
+
+      const res = await fetch("/api/products", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        let serverMsg = "";
+        try {
+          const body = await res.json();
+          serverMsg = body?.error || "";
+        } catch {
+          /* ignore */
+        }
+
+        if (res.status === 401) throw new Error(serverMsg || "Not logged in.");
+        if (res.status === 403) throw new Error(serverMsg || "Forbidden (admin only).");
+        if (res.status === 409) throw new Error(serverMsg || "Unique constraint failed (duplicate SKU?).");
+        if (res.status === 404) throw new Error(serverMsg || "Category not found.");
+        if (res.status === 400) throw new Error(serverMsg || "Invalid product data.");
+
+        throw new Error(serverMsg || `Failed to create product (HTTP ${res.status})`);
+      }
+
       alert("✅ Product created!");
       router.push("/admin/products");
       router.refresh();
-    } else {
-      alert("❌ Failed to create product");
+    } catch (err: any) {
+      console.error(err);
+      setError(err?.message || "Failed to create product.");
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -103,10 +178,13 @@ export default function AddProductPage() {
         </button>
       </div>
 
-      <form
-        onSubmit={handleSubmit}
-        className="space-y-6 bg-white p-6 rounded-xl shadow-md"
-      >
+      {error && (
+        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
+          {error}
+        </div>
+      )}
+
+      <form onSubmit={handleSubmit} className="space-y-6 bg-white p-6 rounded-xl shadow-md">
         {/* Product Name */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -122,9 +200,7 @@ export default function AddProductPage() {
 
         {/* Description */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Description
-          </label>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
           <textarea
             value={description}
             onChange={(e) => setDescription(e.target.value)}
@@ -163,9 +239,7 @@ export default function AddProductPage() {
 
         {/* Image Upload */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Product Image
-          </label>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Product Image</label>
           <input
             type="file"
             accept="image/*"
@@ -173,11 +247,7 @@ export default function AddProductPage() {
             className="block w-full text-sm text-gray-600 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-blue-50 file:text-blue-600 hover:file:bg-blue-100"
           />
           {previewUrl && (
-            <img
-              src={previewUrl}
-              alt="Preview"
-              className="mt-3 w-32 h-32 object-cover rounded-lg border"
-            />
+            <img src={previewUrl} alt="Preview" className="mt-3 w-32 h-32 object-cover rounded-lg border" />
           )}
         </div>
 
@@ -201,17 +271,12 @@ export default function AddProductPage() {
           </select>
         </div>
 
-        {/* Variants */}
+        {/* Variants (optional) */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Variants
-          </label>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Variants (optional)</label>
 
           {variants.map((v, idx) => (
-            <div
-              key={idx}
-              className="border p-4 rounded-lg mb-3 bg-gray-50 shadow-sm"
-            >
+            <div key={idx} className="border p-4 rounded-lg mb-3 bg-gray-50 shadow-sm">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <input
                   placeholder="SKU"
@@ -222,12 +287,11 @@ export default function AddProductPage() {
                     setVariants(updated);
                   }}
                   className="border px-3 py-2 rounded"
-                  required
                 />
                 <input
                   type="number"
                   step="0.01"
-                  placeholder="Price"
+                  placeholder="Variant Price (optional)"
                   value={v.price}
                   onChange={(e) => {
                     const updated = [...variants];
@@ -238,7 +302,7 @@ export default function AddProductPage() {
                 />
                 <input
                   type="number"
-                  placeholder="Stock"
+                  placeholder="Variant Stock (optional)"
                   value={v.stock}
                   onChange={(e) => {
                     const updated = [...variants];
@@ -251,9 +315,7 @@ export default function AddProductPage() {
 
               {/* Attributes */}
               <div className="mt-3">
-                <label className="block text-xs text-gray-600 mb-1">
-                  Attributes
-                </label>
+                <label className="block text-xs text-gray-600 mb-1">Attributes</label>
                 {v.attributes.map((a, aIdx) => (
                   <div key={aIdx} className="flex gap-2 mb-2">
                     <input
@@ -301,17 +363,26 @@ export default function AddProductPage() {
                   + Add Attribute
                 </button>
               </div>
+
+              <div className="mt-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const updated = [...variants];
+                    updated.splice(idx, 1);
+                    setVariants(updated);
+                  }}
+                  className="text-sm text-red-600"
+                >
+                  Remove Variant
+                </button>
+              </div>
             </div>
           ))}
 
           <button
             type="button"
-            onClick={() =>
-              setVariants([
-                ...variants,
-                { sku: "", price: "", stock: "", attributes: [] },
-              ])
-            }
+            onClick={() => setVariants([...variants, { sku: "", price: "", stock: "", attributes: [] }])}
             className="text-green-600 text-sm"
           >
             + Add Variant
@@ -321,9 +392,10 @@ export default function AddProductPage() {
         {/* Submit */}
         <button
           type="submit"
-          className="bg-green-600 text-white px-5 py-2.5 rounded-lg hover:bg-green-700 transition"
+          disabled={submitting}
+          className="bg-green-600 text-white px-5 py-2.5 rounded-lg hover:bg-green-700 transition disabled:opacity-60"
         >
-          Add Product
+          {submitting ? "Saving..." : "Add Product"}
         </button>
       </form>
     </div>

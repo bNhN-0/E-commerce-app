@@ -29,7 +29,7 @@ type Product = {
 };
 
 export default function ProductDetailPage() {
-  const params = useParams(); // { id }
+  const params = useParams(); 
   const [product, setProduct] = useState<Product | null>(null);
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<any>(null);
@@ -44,7 +44,6 @@ export default function ProductDetailPage() {
     []
   );
 
-  // logged-in user (client-side)
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setUser(data.user));
   }, []);
@@ -61,8 +60,6 @@ export default function ProductDetailPage() {
         if (!res.ok) throw new Error("Failed to fetch product");
         const data: Product = await res.json();
         setProduct(data);
-
-        // pick first variant by default (or null if none)
         const first = data.variants && data.variants.length > 0 ? data.variants[0] : null;
         setSelectedVariant(first ?? null);
       } catch (err) {
@@ -110,11 +107,10 @@ export default function ProductDetailPage() {
         throw new Error(err.error || `Failed to add to cart (${res.status})`);
       }
 
-      const data = await res.json(); // { ok, line, totals }
+      const data = await res.json();
       // Drive navbar badge from server truth (distinct item count)
       if (data?.totals) applyTotals(data.totals);
 
-      // optional: toast “Added to cart”
     } catch (error: any) {
       console.error(error);
       alert(error?.message || "Something went wrong.");
