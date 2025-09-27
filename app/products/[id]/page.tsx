@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
+import Image from "next/image";
+import type { User } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabaseClient";
 import { useCart } from "@/app/components/CartContext";
 
@@ -29,14 +31,13 @@ type Product = {
 };
 
 export default function ProductDetailPage() {
-  const params = useParams(); 
+  const params = useParams<{ id: string }>();
   const [product, setProduct] = useState<Product | null>(null);
   const [loading, setLoading] = useState(true);
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<User | null>(null);
   const [selectedVariant, setSelectedVariant] = useState<Variant | null>(null);
   const [adding, setAdding] = useState(false);
 
-  // from CartContext: we now set the badge via server-returned totals
   const { applyTotals } = useCart();
 
   const money = useMemo(
@@ -45,12 +46,12 @@ export default function ProductDetailPage() {
   );
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => setUser(data.user));
+    supabase.auth.getUser().then(({ data }) => setUser(data.user ?? null));
   }, []);
 
   // fetch product
   useEffect(() => {
-    const id = params?.id as string | undefined;
+    const id = params?.id;
     if (!id) return;
 
     const fetchProduct = async () => {
@@ -103,17 +104,16 @@ export default function ProductDetailPage() {
       });
 
       if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || `Failed to add to cart (${res.status})`);
+        const errPayload: { error?: string } = await res.json().catch(() => ({} as { error?: string }));
+        throw new Error(errPayload.error || `Failed to add to cart (${res.status})`);
       }
 
-      const data = await res.json();
-      // Drive navbar badge from server truth (distinct item count)
+      const data: { totals?: { totalItems: number; totalAmount: number } } = await res.json();
       if (data?.totals) applyTotals(data.totals);
-
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : "Something went wrong.";
       console.error(error);
-      alert(error?.message || "Something went wrong.");
+      alert(msg);
     } finally {
       setAdding(false);
     }
@@ -122,10 +122,15 @@ export default function ProductDetailPage() {
   return (
     <div className="p-6 max-w-2xl mx-auto">
       {product.imageUrl && (
-        <img
+        <Image
           src={product.imageUrl}
           alt={product.name}
+          width={1200}
+          height={600}
           className="w-full h-64 object-cover rounded mb-4"
+          // Remove if you configure next.config.js images.domains
+          unoptimized
+          priority
         />
       )}
 

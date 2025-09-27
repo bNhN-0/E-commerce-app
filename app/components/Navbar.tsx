@@ -14,9 +14,9 @@ export default function Navbar() {
   const [user, setUser] = useState<User | null>(null);
   const [isOpen, setIsOpen] = useState(false);
 
-  const cartCtx = useCart() as any;
-  const badgeCount: number =
-    (typeof cartCtx?.cartQty === "number" ? cartCtx.cartQty : cartCtx?.cartCount) ?? 0;
+  // Use the typed context directly (no `any`)
+  const { cartCount } = useCart();
+  const badgeCount: number = cartCount ?? 0;
 
   // Auth state
   useEffect(() => {

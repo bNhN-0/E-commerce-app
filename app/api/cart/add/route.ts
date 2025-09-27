@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prismaDirect, prisma as prismaPooled } from "@/lib/prisma";
 import { getUserSessionLite } from "@/lib/auth-lite";
+import type { Prisma } from "@prisma/client";
 
 export const runtime = "nodejs";
 
@@ -33,9 +34,10 @@ async function runAdd(req: Request, client: Client) {
   if (!user) return NextResponse.json({ error: "Not logged in" }, { status: 401 });
 
   const body = await req.json();
-  const productId = Number(body.productId);
-  const variantId: number | null = body.variantId != null ? Number(body.variantId) : null;
-  const qty = Number(body.qty ?? body.quantity ?? 1);
+  const productId = Number((body as Record<string, unknown>).productId);
+  const rawVariantId = (body as Record<string, unknown>).variantId;
+  const variantId: number | null = rawVariantId != null ? Number(rawVariantId) : null;
+  const qty = Number((body as Record<string, unknown>).qty ?? (body as Record<string, unknown>).quantity ?? 1);
 
   if (!Number.isFinite(productId) || productId <= 0)
     return NextResponse.json({ error: "Invalid productId" }, { status: 400 });
@@ -68,7 +70,7 @@ async function runAdd(req: Request, client: Client) {
   // 3) variant (optional) → override price/sku/attrs
   let unitPrice = product.price;
   let variantSku: string | null = null;
-  let variantAttributes: any = null;
+  let variantAttributes: Prisma.InputJsonValue | null = null;
 
   if (variantId !== null) {
     const variant = await client.productVariant.findFirst({
@@ -79,7 +81,7 @@ async function runAdd(req: Request, client: Client) {
       return NextResponse.json({ error: "Variant not found for this product" }, { status: 400 });
     }
     variantSku = variant.sku;
-    variantAttributes = variant.attributes ?? null;
+    variantAttributes = (variant.attributes as Prisma.InputJsonValue) ?? null;
     unitPrice = variant.price ?? product.price;
   }
 
@@ -111,14 +113,22 @@ async function runAdd(req: Request, client: Client) {
           unitPrice,
           currency: product.currency ?? "USD",
           variantSku,
-          variantAttributes,
+          variantAttributes: variantAttributes ?? undefined,
         },
         select: { id: true, quantity: true, productId: true, variantId: true },
       });
     } else {
       // legacy DB without snapshot columns
+      const legacyData: Prisma.CartItemUncheckedCreateInput = {
+        cartId: cart.id,
+        productId,
+        variantId,
+        quantity: qty,
+        productName: "",
+        unitPrice: 0
+      };
       line = await client.cartItem.create({
-        data: { cartId: cart.id, productId, variantId, quantity: qty } as any,
+        data: legacyData,
         select: { id: true, quantity: true, productId: true, variantId: true },
       });
     }
@@ -129,7 +139,7 @@ async function runAdd(req: Request, client: Client) {
   const totals = await client.cart.update({
     where: { id: cart.id },
     data: {
-      ...(createdNewLine ? { totalItems: { increment: 1 } } : {}), 
+      ...(createdNewLine ? { totalItems: { increment: 1 } } : {}),
       totalAmount: { increment: amountDelta },
     },
     select: { id: true, totalItems: true, totalAmount: true },

@@ -1,6 +1,7 @@
 "use client";
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import FeaturesCard from "./FeaturesCard";
 import { useCart } from "./CartContext";
@@ -60,19 +61,20 @@ export default function FeaturesLayout() {
       }
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || `Failed to add (HTTP ${res.status})`);
+        throw new Error((err as { error?: string })?.error || `Failed to add (HTTP ${res.status})`);
       }
 
-      const payload = await res.json();
+      const payload: { totals?: { totalItems?: number; totalAmount?: number } } = await res.json();
       // Prefer server totals → updates distinct item count correctly
       if (payload?.totals) {
         applyTotals(payload.totals);
       } else {
         await refreshCart();
       }
-    } catch (e: any) {
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : "Could not add to cart.";
       console.error(e);
-      alert(e?.message || "Could not add to cart.");
+      alert(message);
     } finally {
       setAddingIds((s) => {
         const next = new Set(s);
@@ -121,10 +123,14 @@ export default function FeaturesLayout() {
                   >
                     <Link href={`/products/${p.id}`} className="block relative">
                       {p.imageUrl ? (
-                        <img
+                        <Image
                           src={p.imageUrl}
                           alt={p.name}
+                          width={800}
+                          height={600}
                           className="w-full aspect-[4/3] object-cover rounded-t-2xl group-hover:scale-105 transition-transform duration-300"
+                          sizes="(max-width: 768px) 50vw, 25vw"
+                          unoptimized
                         />
                       ) : (
                         <div className="w-full aspect-[4/3] bg-gray-100 flex items-center justify-center text-gray-400 text-sm">

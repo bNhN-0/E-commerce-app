@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import Image from "next/image";
 
 type Category = { id: number; name: string; type: string };
 
@@ -26,26 +27,57 @@ type UIProduct = {
   variants: UIVariant[];
 };
 
+type ApiVariant = {
+  id?: number | string | null;
+  sku?: string | null;
+  price?: number | string | null;
+  stock?: number | string | null;
+  attributes?: unknown;
+};
+
+type ApiProduct = {
+  id?: number | string | null;
+  name?: string | null;
+  description?: string | null;
+  price?: number | string | null;
+  stock?: number | string | null;
+  imageUrl?: string | null;
+  categoryId?: number | string | null;
+  category?: { id?: number | string | null } | null;
+  variants?: ApiVariant[] | null;
+};
+
 const uid = () => Math.random().toString(36).slice(2, 9);
+
+const asNumber = (v: unknown, fallback = 0): number => {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : fallback;
+};
+
+const asString = (v: unknown, fallback = ""): string =>
+  typeof v === "string" ? v : v == null ? fallback : String(v);
+
+const isNameValue = (x: unknown): x is { name: unknown; value: unknown } =>
+  typeof x === "object" && x !== null && "name" in x && "value" in x;
 
 function toUIAttributes(attrs: unknown): UIAttribute[] {
   if (!attrs) return [];
   if (Array.isArray(attrs)) {
-    return (attrs as any[]).map((a, i) => {
-      if (a && typeof a === "object" && "name" in a && "value" in a) {
-        return { name: String((a as any).name), value: String((a as any).value), tempId: uid() };
+    return attrs.map((a, i) => {
+      if (isNameValue(a)) {
+        return { name: asString(a.name), value: asString(a.value), tempId: uid() };
       }
-      return { name: `attr_${i + 1}`, value: String(a), tempId: uid() };
+      return { name: `attr_${i + 1}`, value: asString(a), tempId: uid() };
     });
   }
   if (typeof attrs === "object") {
     return Object.entries(attrs as Record<string, unknown>).map(([k, v]) => ({
       name: String(k),
-      value: String(v),
+      value: asString(v),
       tempId: uid(),
     }));
   }
-  return [{ name: "value", value: String(attrs), tempId: uid() }];
+  return [{ name: "value", value: asString(attrs), tempId: uid() }];
 }
 
 function fromUIAttributes(ui: UIAttribute[]) {
@@ -79,29 +111,45 @@ export default function EditProductPage() {
         if (!prodRes.ok) throw new Error("Failed to load product");
         if (!catRes.ok) throw new Error("Failed to load categories");
 
-        const rawProduct = await prodRes.json();
-        const rawCats = await catRes.json();
-        const cats: Category[] = Array.isArray(rawCats?.data)
-          ? rawCats.data
+        const rawProduct = (await prodRes.json()) as unknown;
+        const rawCats = (await catRes.json()) as unknown;
+
+        // categories can be either [{...}] or { data: [{...}] }
+        const catsArray: unknown[] = Array.isArray((rawCats as { data?: unknown }).data)
+          ? ((rawCats as { data: unknown[] }).data as unknown[])
           : Array.isArray(rawCats)
-          ? rawCats
+          ? (rawCats as unknown[])
           : [];
 
+        const cats: Category[] = catsArray
+          .map((c) => ({
+            id: asNumber((c as Record<string, unknown>).id),
+            name: asString((c as Record<string, unknown>).name),
+            type: asString((c as Record<string, unknown>).type),
+          }))
+          .filter((c) => Number.isFinite(c.id) && c.name.length > 0);
+
+        const rp = rawProduct as ApiProduct;
         const ui: UIProduct = {
-          id: Number(rawProduct.id),
-          name: String(rawProduct.name ?? ""),
-          description: rawProduct.description ?? null,
-          price: Number(rawProduct.price ?? 0),
-          stock: Number(rawProduct.stock ?? 0),
-          imageUrl: rawProduct.imageUrl ?? null,
-          categoryId: rawProduct.categoryId ?? rawProduct.category?.id ?? null,
-          variants: Array.isArray(rawProduct.variants)
-            ? rawProduct.variants.map((v: any) => ({
-                id: v.id ? Number(v.id) : undefined,
+          id: asNumber(rp.id),
+          name: asString(rp.name),
+          description: rp.description ?? null,
+          price: asNumber(rp.price),
+          stock: asNumber(rp.stock),
+          imageUrl: rp.imageUrl ?? null,
+          categoryId:
+            rp.categoryId != null
+              ? asNumber(rp.categoryId)
+              : rp.category?.id != null
+              ? asNumber(rp.category.id)
+              : null,
+          variants: Array.isArray(rp.variants)
+            ? rp.variants.map((v): UIVariant => ({
+                id: v.id != null ? asNumber(v.id) : undefined,
                 tempId: uid(),
-                sku: String(v.sku ?? ""),
-                price: v.price == null ? 0 : Number(v.price),
-                stock: v.stock == null ? 0 : Number(v.stock),
+                sku: asString(v.sku),
+                price: v.price == null ? 0 : asNumber(v.price, 0),
+                stock: v.stock == null ? 0 : asNumber(v.stock, 0),
                 attributes: toUIAttributes(v.attributes),
               }))
             : [],
@@ -110,9 +158,9 @@ export default function EditProductPage() {
         setCategories(cats);
         setProduct(ui);
         setPreviewUrl(ui.imageUrl || "");
-      } catch (e: any) {
+      } catch (e: unknown) {
         console.error(e);
-        setError(e?.message || "Failed to load data.");
+        setError(e instanceof Error ? e.message : "Failed to load data.");
       } finally {
         setLoading(false);
       }
@@ -137,7 +185,6 @@ export default function EditProductPage() {
     setSaving(true);
     setError(null);
     try {
-      // Filter out empty/new variants with no SKU
       const cleanedVariants = product.variants
         .map((v) => ({
           ...(v.id ? { id: v.id } : {}),
@@ -159,7 +206,7 @@ export default function EditProductPage() {
       };
 
       const res = await fetch(`/api/products/${productId}`, {
-        method: "PATCH", // use PATCH to be safe even if PUT isn't present
+        method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
@@ -167,13 +214,12 @@ export default function EditProductPage() {
       if (!res.ok) {
         let serverMsg = "";
         try {
-          const j = await res.json();
+          const j = (await res.json()) as { error?: string; message?: string };
           serverMsg = j?.error || j?.message || "";
-        } catch {}
-        if (res.status === 401) {
-          // not logged in
-          return router.push("/auth");
+        } catch {
+          /* ignore */
         }
+        if (res.status === 401) return router.push("/auth");
         if (res.status === 403) throw new Error(serverMsg || "Forbidden (admin only).");
         if (res.status === 404) throw new Error(serverMsg || "Product or category not found.");
         if (res.status === 409) throw new Error(serverMsg || "Duplicate SKU (unique constraint).");
@@ -183,9 +229,9 @@ export default function EditProductPage() {
       alert("✅ Product updated!");
       router.push("/admin/products");
       router.refresh();
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error(e);
-      setError(e?.message || "Failed to update product.");
+      setError(e instanceof Error ? e.message : "Failed to update product.");
     } finally {
       setSaving(false);
     }
@@ -276,7 +322,16 @@ export default function EditProductPage() {
             className="block w-full text-sm text-gray-600 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-blue-50 file:text-blue-600 hover:file:bg-blue-100"
           />
           {previewUrl && (
-            <img src={previewUrl} alt="Preview" className="mt-3 w-32 h-32 object-cover rounded-lg border" />
+            <div className="mt-3 w-32 h-32 relative">
+              <Image
+                src={previewUrl}
+                alt="Preview"
+                width={128}
+                height={128}
+                className="object-cover rounded-lg border"
+                unoptimized
+              />
+            </div>
           )}
         </div>
 

@@ -1,4 +1,3 @@
-// app/api/cart/update/route.ts
 import { NextResponse } from "next/server";
 import { prisma as prismaPooled, prismaDirect } from "@/lib/prisma";
 import { getUserSessionLite } from "@/lib/auth-lite";
@@ -7,14 +6,26 @@ export const runtime = "nodejs";
 
 type Client = typeof prismaPooled;
 
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null;
+}
+
 export async function PATCH(req: Request) {
   const user = await getUserSessionLite();
   if (!user) return NextResponse.json({ error: "Not logged in" }, { status: 401 });
 
   try {
-    const { lineId, qty } = await req.json();
-    const lineID = Number(lineId);
-    const newQty = Number(qty);
+    // Parse & validate body
+    const raw = (await req.json().catch(() => null)) as unknown;
+    const lineIdInput = isRecord(raw) ? raw["lineId"] : undefined;
+    const qtyInput = isRecord(raw) ? raw["qty"] : undefined;
+
+    const lineID =
+      typeof lineIdInput === "number" || typeof lineIdInput === "string"
+        ? Number(lineIdInput)
+        : NaN;
+    const newQty =
+      typeof qtyInput === "number" || typeof qtyInput === "string" ? Number(qtyInput) : NaN;
 
     if (!Number.isFinite(lineID) || lineID <= 0) {
       return NextResponse.json({ error: "Invalid lineId" }, { status: 400 });
@@ -34,8 +45,7 @@ export async function PATCH(req: Request) {
             productId: true,
             variantId: true,
             quantity: true,
-            // snapshot price if your DB has it; harmless if column exists
-            unitPrice: true,
+            unitPrice: true, // snapshot if present
             cart: { select: { userId: true } },
           },
         });
@@ -45,26 +55,29 @@ export async function PATCH(req: Request) {
         }
 
         // Resolve unitPrice: prefer snapshot, fall back to variant/product
-        let unitPrice: number | null = line.unitPrice ?? null;
+        let resolvedUnitPrice: number | null = line.unitPrice ?? null;
 
-        if (unitPrice == null) {
+        if (resolvedUnitPrice == null) {
           if (line.variantId != null) {
             const v = await tx.productVariant.findUnique({
               where: { id: line.variantId },
               select: { price: true, productId: true },
             });
             if (!v || v.productId !== line.productId) throw new Error("VARIANT_NOT_FOUND");
-            if (v.price != null) unitPrice = v.price;
+            if (v.price != null) resolvedUnitPrice = v.price;
           }
-          if (unitPrice == null) {
+          if (resolvedUnitPrice == null) {
             const p = await tx.product.findUnique({
               where: { id: line.productId },
               select: { price: true },
             });
             if (!p) throw new Error("PRODUCT_NOT_FOUND");
-            unitPrice = p.price;
+            resolvedUnitPrice = p.price;
           }
         }
+
+        // From here on, we guarantee a number
+        const unitPrice: number = resolvedUnitPrice;
 
         const oldQty = line.quantity;
 
@@ -74,7 +87,11 @@ export async function PATCH(req: Request) {
             where: { id: line.cartId },
             select: { id: true, totalItems: true, totalAmount: true },
           });
-          return { totals, line: { id: line.id, quantity: oldQty, unitPrice }, meta: { deltaLines: 0 } };
+          return {
+            totals,
+            line: { id: line.id, quantity: oldQty, unitPrice },
+            meta: { deltaLines: 0 },
+          };
         }
 
         // Remove line when qty -> 0  (distinct count -1)
@@ -85,8 +102,8 @@ export async function PATCH(req: Request) {
           const totals = await tx.cart.update({
             where: { id: line.cartId },
             data: {
-              totalItems: { decrement: 1 },         // distinct items count
-              totalAmount: { decrement: amountDelta }
+              totalItems: { decrement: 1 }, 
+              totalAmount: { decrement: amountDelta },
             },
             select: { id: true, totalItems: true, totalAmount: true },
           });
@@ -110,12 +127,17 @@ export async function PATCH(req: Request) {
 
         return {
           totals,
-          line: { id: line.id, quantity: newQty, unitPrice, productId: line.productId, variantId: line.variantId },
+          line: {
+            id: line.id,
+            quantity: newQty,
+            unitPrice,
+            productId: line.productId,
+            variantId: line.variantId,
+          },
           meta: { deltaLines: 0 },
         };
       });
 
-    // Prefer DIRECT connection; fallback to pooled
     let result;
     try {
       result = await runTx(prismaDirect);
@@ -124,11 +146,13 @@ export async function PATCH(req: Request) {
     }
 
     return NextResponse.json(result, { headers: { "Cache-Control": "no-store" } });
-  } catch (err: any) {
-    if (err?.message === "LINE_NOT_FOUND")
-      return NextResponse.json({ error: "Cart line not found" }, { status: 404 });
-    if (err?.message === "PRODUCT_NOT_FOUND" || err?.message === "VARIANT_NOT_FOUND")
-      return NextResponse.json({ error: "Product/Variant not found" }, { status: 400 });
+  } catch (err: unknown) {
+    if (err instanceof Error) {
+      if (err.message === "LINE_NOT_FOUND")
+        return NextResponse.json({ error: "Cart line not found" }, { status: 404 });
+      if (err.message === "PRODUCT_NOT_FOUND" || err.message === "VARIANT_NOT_FOUND")
+        return NextResponse.json({ error: "Product/Variant not found" }, { status: 400 });
+    }
 
     console.error("PATCH /api/cart/update failed", err);
     return NextResponse.json({ error: "Failed to update cart" }, { status: 500 });

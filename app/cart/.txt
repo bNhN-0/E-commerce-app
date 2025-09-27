@@ -2,14 +2,12 @@
 
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import Image from "next/image";
 import { supabase } from "@/lib/supabaseClient";
 import { useCart } from "../components/CartContext";
 
-type VariantKV = { name?: unknown; value?: unknown };
 type VariantAttributes =
   | Record<string, unknown>
-  | Array<VariantKV | unknown>
+  | Array<{ name?: unknown; value?: unknown } | unknown>
   | null;
 
 type CartItem = {
@@ -39,32 +37,36 @@ type CartItem = {
 type CartSnapshot = {
   id: number | null;
   userId: string;
-  totalItems: number; // DISTINCT count (lines)
+  totalItems: number;   // DISTINCT count (lines)
   totalAmount: number;
   createdAt: string | null;
   items: CartItem[];
 };
 
-// ---------- helpers ----------
-const isKV = (v: unknown): v is { name: unknown; value: unknown } =>
-  typeof v === "object" && v !== null && "name" in v && "value" in v;
-
+// util: format attributes safely
 const formatAnyAttrs = (attrs: unknown): string => {
   if (!attrs) return "";
   if (Array.isArray(attrs)) {
-    return attrs
-      .map((a) => (isKV(a) ? `${String(a.name)}: ${String(a.value)}` : String(a)))
-      .join(", ");
+    if (attrs.length > 0 && typeof attrs[0] === "object" && attrs[0] !== null) {
+      return (attrs as Array<{ name?: unknown; value?: unknown }>)
+        .map((a) =>
+          a && "name" in a && "value" in a
+            ? `${String((a as any).name)}: ${String((a as any).value)}`
+            : String(a)
+        )
+        .join(", ");
+    }
+    return (attrs as any[]).map(String).join(", ");
   }
   if (typeof attrs === "object") {
-    const rec = attrs as Record<string, unknown>;
-    return Object.entries(rec)
+    return Object.entries(attrs as Record<string, unknown>)
       .map(([k, v]) => `${k}: ${String(v)}`)
       .join(", ");
   }
   return String(attrs);
 };
 
+// local helpers
 const sumQty = (items: CartItem[]) => items.reduce((s, i) => s + i.quantity, 0);
 const sumAmount = (items: CartItem[]) =>
   items.reduce((s, i) => {
@@ -72,7 +74,6 @@ const sumAmount = (items: CartItem[]) =>
     return s + unit * i.quantity;
   }, 0);
 
-// ---------- component ----------
 export default function CartPage() {
   const [cart, setCart] = useState<CartSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
@@ -81,8 +82,11 @@ export default function CartPage() {
 
   const router = useRouter();
 
-  // CartContext – use the typed hook directly
-  const { applyTotals } = useCart();
+  // CartContext — prefer applyTotals (distinct count), fallback to setCartCount
+  const cartCtx = useCart() as any;
+  const applyTotals: undefined | ((t: { totalItems?: number; totalAmount?: number; qty?: number }) => void) =
+    cartCtx?.applyTotals;
+  const setCartCount: undefined | ((n: number) => void) = cartCtx?.setCartCount;
 
   const money = useMemo(
     () => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }),
@@ -106,8 +110,9 @@ export default function CartPage() {
 
         setCart(data);
 
-        // Keep context totals in sync (distinct lines + amount)
-        applyTotals({ totalItems: data.totalItems, totalAmount: data.totalAmount });
+        const qty = sumQty(data.items);
+        if (applyTotals) applyTotals({ totalItems: data.totalItems, totalAmount: data.totalAmount, qty });
+        else if (setCartCount) setCartCount(data.totalItems ?? 0);
       } catch (e) {
         console.error(e);
         const empty: CartSnapshot = {
@@ -119,13 +124,14 @@ export default function CartPage() {
           items: [],
         };
         setCart(empty);
-        applyTotals({ totalItems: 0, totalAmount: 0 });
+        if (applyTotals) applyTotals({ totalItems: 0, totalAmount: 0, qty: 0 });
+        else if (setCartCount) setCartCount(0);
       } finally {
         setLoading(false);
       }
     };
     fetchCart();
-  }, [router, applyTotals]);
+  }, [router, applyTotals, setCartCount]);
 
   const setLinePending = (lineId: number, on: boolean) => {
     setPendingLines((prev) => {
@@ -151,10 +157,12 @@ export default function CartPage() {
 
       const localAmount = sumAmount(nextItems);
       const localDistinct = nextItems.length;
+      const localQty = sumQty(nextItems);
 
       setCart({ ...cart, items: nextItems, totalAmount: localAmount, totalItems: localDistinct });
       if (newQty === 0) {
-        applyTotals({ totalItems: localDistinct, totalAmount: localAmount });
+        if (applyTotals) applyTotals({ totalItems: localDistinct, totalAmount: localAmount, qty: localQty });
+        else if (setCartCount) setCartCount(localDistinct);
       }
 
       setLinePending(lineId, true);
@@ -165,33 +173,33 @@ export default function CartPage() {
           body: JSON.stringify({ lineId, qty: newQty }),
         });
         if (!res.ok) throw new Error("update failed");
-        const data: { totals?: { totalItems: number; totalAmount: number }; items?: CartItem[] } =
-          await res.json();
+        const data = await res.json();
 
         if (data?.totals) {
-          applyTotals({
-            totalItems: data.totals.totalItems,
-            totalAmount: data.totals.totalAmount,
-          });
+          if (applyTotals) applyTotals({ totalItems: data.totals.totalItems, totalAmount: data.totals.totalAmount, qty: localQty });
+          else if (setCartCount) setCartCount(data.totals.totalItems ?? localDistinct);
+
           setCart((c) =>
-            c && data.totals
-              ? { ...c, totalItems: data.totals.totalItems, totalAmount: data.totals.totalAmount }
-              : c
+            c ? { ...c, totalItems: data.totals.totalItems, totalAmount: data.totals.totalAmount } : c
           );
         } else if (data?.items) {
-          const snap = data as unknown as CartSnapshot;
-          applyTotals({ totalItems: snap.totalItems, totalAmount: snap.totalAmount });
+          const snap = data as CartSnapshot;
+          const qty2 = sumQty(snap.items);
+          if (applyTotals) applyTotals({ totalItems: snap.totalItems, totalAmount: snap.totalAmount, qty: qty2 });
+          else if (setCartCount) setCartCount(snap.totalItems ?? localDistinct);
           setCart(snap);
         }
       } catch (e) {
         console.warn("❌ Failed to update cart, reverting", e);
         setCart(prev);
-        applyTotals({ totalItems: prev.totalItems, totalAmount: prev.totalAmount });
+        const qtyPrev = sumQty(prev.items);
+        if (applyTotals) applyTotals({ totalItems: prev.totalItems, totalAmount: prev.totalAmount, qty: qtyPrev });
+        else if (setCartCount) setCartCount(prev.totalItems ?? 0);
       } finally {
         setLinePending(lineId, false);
       }
     },
-    [cart, pendingLines, applyTotals]
+    [cart, pendingLines, applyTotals, setCartCount]
   );
 
   // Remove line (POST /api/cart/remove)
@@ -204,10 +212,12 @@ export default function CartPage() {
 
       const localAmount = sumAmount(nextItems);
       const localDistinct = nextItems.length;
+      const localQty = sumQty(nextItems);
 
       // optimistic: distinct count decreases by 1
       setCart({ ...cart, items: nextItems, totalAmount: localAmount, totalItems: localDistinct });
-      applyTotals({ totalItems: localDistinct, totalAmount: localAmount });
+      if (applyTotals) applyTotals({ totalItems: localDistinct, totalAmount: localAmount, qty: localQty });
+      else if (setCartCount) setCartCount(localDistinct);
 
       setLinePending(lineId, true);
       try {
@@ -217,33 +227,33 @@ export default function CartPage() {
           body: JSON.stringify({ lineId }),
         });
         if (!res.ok) throw new Error("remove failed");
-        const data: { totals?: { totalItems: number; totalAmount: number }; items?: CartItem[] } =
-          await res.json();
+        const data = await res.json();
 
         if (data?.totals) {
-          applyTotals({
-            totalItems: data.totals.totalItems,
-            totalAmount: data.totals.totalAmount,
-          });
+          if (applyTotals) applyTotals({ totalItems: data.totals.totalItems, totalAmount: data.totals.totalAmount, qty: localQty });
+          else if (setCartCount) setCartCount(data.totals.totalItems ?? localDistinct);
+
           setCart((c) =>
-            c && data.totals
-              ? { ...c, totalItems: data.totals.totalItems, totalAmount: data.totals.totalAmount }
-              : c
+            c ? { ...c, totalItems: data.totals.totalItems, totalAmount: data.totals.totalAmount } : c
           );
         } else if (data?.items) {
-          const snap = data as unknown as CartSnapshot;
-          applyTotals({ totalItems: snap.totalItems, totalAmount: snap.totalAmount });
+          const snap = data as CartSnapshot;
+          const qty2 = sumQty(snap.items);
+          if (applyTotals) applyTotals({ totalItems: snap.totalItems, totalAmount: snap.totalAmount, qty: qty2 });
+          else if (setCartCount) setCartCount(snap.totalItems ?? localDistinct);
           setCart(snap);
         }
       } catch (e) {
         console.warn("❌ Failed to remove line, reverting", e);
         setCart(prev);
-        applyTotals({ totalItems: prev.totalItems, totalAmount: prev.totalAmount });
+        const qtyPrev = sumQty(prev.items);
+        if (applyTotals) applyTotals({ totalItems: prev.totalItems, totalAmount: prev.totalAmount, qty: qtyPrev });
+        else if (setCartCount) setCartCount(prev.totalItems ?? 0);
       } finally {
         setLinePending(lineId, false);
       }
     },
-    [cart, pendingLines, applyTotals]
+    [cart, pendingLines, applyTotals, setCartCount]
   );
 
   // Clear cart (DELETE /api/cart)
@@ -255,34 +265,37 @@ export default function CartPage() {
 
     // optimistic clear
     setCart({ ...cart, items: [], totalItems: 0, totalAmount: 0 });
-    applyTotals({ totalItems: 0, totalAmount: 0 });
+    if (applyTotals) applyTotals({ totalItems: 0, totalAmount: 0, qty: 0 });
+    else if (setCartCount) setCartCount(0);
 
     try {
       const res = await fetch("/api/cart", { method: "DELETE" });
       if (!res.ok) throw new Error("clear failed");
-      const data: { totals?: { totalItems: number; totalAmount: number }; items?: CartItem[] } =
-        await res.json();
+      const data = await res.json();
 
       if (data?.totals) {
-        applyTotals({ totalItems: data.totals.totalItems, totalAmount: data.totals.totalAmount });
+        if (applyTotals) applyTotals({ totalItems: data.totals.totalItems, totalAmount: data.totals.totalAmount, qty: 0 });
+        else if (setCartCount) setCartCount(data.totals.totalItems ?? 0);
+
         setCart((c) =>
-          c && data.totals
-            ? { ...c, totalItems: data.totals.totalItems, totalAmount: data.totals.totalAmount, items: [] }
-            : c
+          c ? { ...c, totalItems: data.totals.totalItems, totalAmount: data.totals.totalAmount, items: [] } : c
         );
       } else if (data?.items) {
-        const snap = data as unknown as CartSnapshot;
-        applyTotals({ totalItems: snap.totalItems, totalAmount: snap.totalAmount });
+        const snap = data as CartSnapshot;
+        if (applyTotals) applyTotals({ totalItems: snap.totalItems, totalAmount: snap.totalAmount, qty: 0 });
+        else if (setCartCount) setCartCount(snap.totalItems ?? 0);
         setCart(snap);
       }
     } catch (e) {
       console.warn("❌ Failed to clear cart, reverting", e);
       setCart(prev);
-      applyTotals({ totalItems: prev.totalItems, totalAmount: prev.totalAmount });
+      const qtyPrev = sumQty(prev.items);
+      if (applyTotals) applyTotals({ totalItems: prev.totalItems, totalAmount: prev.totalAmount, qty: qtyPrev });
+      else if (setCartCount) setCartCount(prev.totalItems ?? 0);
     } finally {
       setClearing(false);
     }
-  }, [cart, clearing, applyTotals]);
+  }, [cart, clearing, applyTotals, setCartCount]);
 
   // Checkout
   const handleCheckout = async () => {
@@ -290,7 +303,8 @@ export default function CartPage() {
     if (res.ok) {
       alert("✅ Order placed!");
       setCart((c) => (c ? { ...c, items: [], totalItems: 0, totalAmount: 0 } : c));
-      applyTotals({ totalItems: 0, totalAmount: 0 });
+      if (applyTotals) applyTotals({ totalItems: 0, totalAmount: 0, qty: 0 });
+      else if (setCartCount) setCartCount(0);
       router.push("/orders");
     } else {
       const error = await res.json();
@@ -306,7 +320,10 @@ export default function CartPage() {
     );
   }
 
-  const total = cart?.totalAmount ?? sumAmount(cart?.items ?? []) ?? 0;
+  const total =
+    cart?.totalAmount ??
+    sumAmount(cart?.items ?? []) ??
+    0;
 
   return (
     <div className="p-6 max-w-3xl mx-auto">
@@ -354,14 +371,7 @@ export default function CartPage() {
                 >
                   <div className="flex items-center gap-3">
                     {img ? (
-                      <Image
-                        src={img}
-                        alt={name}
-                        width={64}
-                        height={64}
-                        className="w-16 h-16 object-cover rounded"
-                        unoptimized
-                      />
+                      <img src={img} alt={name} className="w-16 h-16 object-cover rounded" />
                     ) : (
                       <div className="w-16 h-16 bg-gray-200 flex items-center justify-center rounded text-gray-400">
                         📦

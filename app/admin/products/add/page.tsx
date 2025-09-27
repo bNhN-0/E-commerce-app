@@ -2,31 +2,56 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 
 type Category = { id: number; name: string; type: string };
+
 type VariantRow = {
   sku: string;
-  price: string; // form string; converted on submit
-  stock: string; // form string; converted on submit
+  price: string; // form input, converted on submit
+  stock: string; // form input, converted on submit
   attributes: { name: string; value: string }[];
 };
 
-type VariantPayload = {
+type CreateVariantPayload = {
   sku: string;
   price: number | null;
   stock: number;
   attributes: { name: string; value: string }[];
 };
 
-type ProductPayload = {
+type CreateProductPayload = {
   name: string;
   description: string | null;
   price: number;
   stock: number;
   imageUrl: string | null;
   categoryId: number;
-  variants?: VariantPayload[];
+  variants?: CreateVariantPayload[];
 };
+
+// ------- helpers (typed, no `any`) -------
+const extractArray = (raw: unknown): unknown[] => {
+  if (Array.isArray(raw)) return raw;
+  if (typeof raw === "object" && raw !== null) {
+    const obj = raw as Record<string, unknown>;
+    for (const k of ["data", "items", "rows", "list", "categories"]) {
+      const v = obj[k];
+      if (Array.isArray(v)) return v;
+    }
+  }
+  return [];
+};
+
+const toNumber = (v: unknown, fallback = 0) => {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : fallback;
+};
+
+const toString = (v: unknown, fallback = "") =>
+  typeof v === "string" ? v : v == null ? fallback : String(v);
+
+// ----------------------------------------
 
 export default function AddProductPage() {
   const [name, setName] = useState("");
@@ -43,39 +68,25 @@ export default function AddProductPage() {
 
   const router = useRouter();
 
-  // Safe array extractor with no `any`
-  const pickArray = (d: unknown): unknown[] => {
-    if (Array.isArray(d)) return d;
-    if (d && typeof d === "object") {
-      const obj = d as Record<string, unknown>;
-      for (const k of ["data", "items", "rows", "list", "categories"] as const) {
-        const v = obj[k];
-        if (Array.isArray(v)) return v;
-      }
-    }
-    return [];
-  };
-
-  const toCategory = (x: unknown): Category => {
-    const o = (x && typeof x === "object" ? (x as Record<string, unknown>) : {}) as Record<
-      string,
-      unknown
-    >;
-    return {
-      id: Number(o.id ?? 0),
-      name: String(o.name ?? ""),
-      type: String(o.type ?? ""),
-    };
-  };
-
   useEffect(() => {
     (async () => {
       try {
         const res = await fetch("/api/categories", { cache: "no-store" });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const raw: unknown = await res.json();
-        const arr = pickArray(raw).map(toCategory);
-        setCategories(arr);
+        const raw = (await res.json()) as unknown;
+
+        const arr = extractArray(raw).map((c): Category => {
+          const obj = c as Record<string, unknown>;
+          return {
+            id: toNumber(obj.id),
+            name: toString(obj.name),
+            type: toString(obj.type),
+          };
+        });
+
+        setCategories(
+          arr.filter((c) => Number.isFinite(c.id) && c.name.length > 0)
+        );
       } catch (e) {
         console.error("Failed to fetch categories", e);
         setCategories([]);
@@ -101,7 +112,7 @@ export default function AddProductPage() {
     return null;
   };
 
-  const cleanVariants = (): VariantPayload[] => {
+  const cleanVariants = (): CreateVariantPayload[] => {
     return variants
       .map((v) => {
         const sku = v.sku.trim();
@@ -112,8 +123,8 @@ export default function AddProductPage() {
 
         const attrs = (v.attributes || [])
           .map((a) => ({
-            name: (a.name ?? "").toString().trim(),
-            value: (a.value ?? "").toString().trim(),
+            name: toString(a.name).trim(),
+            value: toString(a.value).trim(),
           }))
           .filter((a) => a.name && a.value);
 
@@ -124,7 +135,7 @@ export default function AddProductPage() {
           attributes: attrs,
         };
       })
-      .filter((x): x is VariantPayload => Boolean(x));
+      .filter((x): x is CreateVariantPayload => x !== null);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -141,7 +152,7 @@ export default function AddProductPage() {
     try {
       const uploadedUrl = imageFile ? previewUrl : "";
 
-      const payload: ProductPayload = {
+      const payload: CreateProductPayload = {
         name: name.trim(),
         description: description.trim() || null,
         price: Number(price),
@@ -162,10 +173,8 @@ export default function AddProductPage() {
       if (!res.ok) {
         let serverMsg = "";
         try {
-          const body: unknown = await res.json();
-          if (body && typeof body === "object" && "error" in body) {
-            serverMsg = String((body as Record<string, unknown>).error ?? "");
-          }
+          const body = (await res.json()) as { error?: string };
+          serverMsg = body?.error || "";
         } catch {
           /* ignore */
         }
@@ -182,9 +191,9 @@ export default function AddProductPage() {
       alert("✅ Product created!");
       router.push("/admin/products");
       router.refresh();
-    } catch (e: unknown) {
-      console.error(e);
-      setError(e instanceof Error ? e.message : "Failed to create product.");
+    } catch (err: unknown) {
+      console.error(err);
+      setError(err instanceof Error ? err.message : "Failed to create product.");
     } finally {
       setSubmitting(false);
     }
@@ -272,9 +281,17 @@ export default function AddProductPage() {
             onChange={handleImageChange}
             className="block w-full text-sm text-gray-600 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-blue-50 file:text-blue-600 hover:file:bg-blue-100"
           />
-          {/* eslint-disable-next-line @next/next/no-img-element */}
           {previewUrl && (
-            <img src={previewUrl} alt="Preview" className="mt-3 w-32 h-32 object-cover rounded-lg border" />
+            <div className="mt-3 w-32 h-32 relative">
+              <Image
+                src={previewUrl}
+                alt="Preview"
+                width={128}
+                height={128}
+                className="object-cover rounded-lg border"
+                unoptimized
+              />
+            </div>
           )}
         </div>
 
@@ -409,7 +426,9 @@ export default function AddProductPage() {
 
           <button
             type="button"
-            onClick={() => setVariants([...variants, { sku: "", price: "", stock: "", attributes: [] }])}
+            onClick={() =>
+              setVariants([...variants, { sku: "", price: "", stock: "", attributes: [] }])
+            }
             className="text-green-600 text-sm"
           >
             + Add Variant

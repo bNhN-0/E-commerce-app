@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 
+type CategoryInfo = { id: number; name: string; type: string };
 type Product = {
   id: number;
   name: string;
@@ -10,8 +12,53 @@ type Product = {
   stock: number;
   imageUrl?: string;
   createdAt?: string;
-  category?: { id: number; name: string; type: string };
+  category?: CategoryInfo;
 };
+
+// Safely pull an array out of common API envelope shapes (no `any`)
+const pickArray = (raw: unknown): unknown[] => {
+  if (Array.isArray(raw)) return raw;
+
+  if (typeof raw === "object" && raw !== null) {
+    const obj = raw as Record<string, unknown>;
+
+    // direct keys that may contain arrays
+    for (const k of ["products", "items", "data", "rows", "result", "list"]) {
+      const v = obj[k];
+      if (Array.isArray(v)) return v;
+    }
+
+    // nested items.data
+    const items = obj["items"];
+    if (items && typeof items === "object" && Array.isArray((items as Record<string, unknown>)["data"])) {
+      return (items as Record<string, unknown>)["data"] as unknown[];
+    }
+
+    // Graph-like { edges: [{ node: {...} }] }
+    const edges = obj["edges"];
+    if (Array.isArray(edges)) {
+      const nodes = edges
+        .map((e) => {
+          if (typeof e === "object" && e !== null) {
+            const r = e as Record<string, unknown>;
+            return r["node"];
+          }
+          return undefined;
+        })
+        .filter((n): n is unknown => n !== undefined);
+      if (nodes.length) return nodes;
+    }
+  }
+  return [];
+};
+
+// Coercion helpers
+const toNumber = (v: unknown, fallback = 0) => {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : fallback;
+};
+const toString = (v: unknown, fallback = "") =>
+  typeof v === "string" ? v : v == null ? fallback : String(v);
 
 export default function AdminProductsPage() {
   const [products, setProducts] = useState<Product[]>([]);
@@ -21,32 +68,29 @@ export default function AdminProductsPage() {
   const [sort, setSort] = useState<"name" | "price" | "stock">("name");
   const [filterCategory, setFilterCategory] = useState("all");
 
-  // Robustly pick an array from many possible API shapes
-  const pickArray = (d: any): any[] => {
-    if (Array.isArray(d)) return d;
-    const keys = ["products", "items", "data", "rows", "result", "list"];
-    for (const k of keys) if (Array.isArray(d?.[k])) return d[k];
-    if (Array.isArray(d?.items?.data)) return d.items.data;
-    if (Array.isArray(d?.edges)) return d.edges.map((e: any) => e?.node).filter(Boolean);
-    return [];
-  };
-
-  const normalizeProducts = (data: any): Product[] =>
-    pickArray(data).map((p: any) => ({
-      id: Number(p.id),
-      name: String(p.name ?? ""),
-      price: Number(p.price ?? 0),
-      stock: Number(p.stock ?? 0),
-      imageUrl: p.imageUrl ?? undefined,
-      createdAt: p.createdAt ?? undefined,
-      category: p.category
+  const normalizeProducts = useCallback((data: unknown): Product[] => {
+    return pickArray(data).map((p) => {
+      const obj = p as Record<string, unknown>;
+      const catRaw = obj["category"] as Record<string, unknown> | undefined;
+      const category: CategoryInfo | undefined = catRaw
         ? {
-            id: Number(p.category.id),
-            name: String(p.category.name ?? ""),
-            type: String(p.category.type ?? ""),
+            id: toNumber(catRaw.id),
+            name: toString(catRaw.name),
+            type: toString(catRaw.type),
           }
-        : undefined,
-    }));
+        : undefined;
+
+      return {
+        id: toNumber(obj.id),
+        name: toString(obj.name),
+        price: toNumber(obj.price),
+        stock: toNumber(obj.stock),
+        imageUrl: typeof obj.imageUrl === "string" ? obj.imageUrl : undefined,
+        createdAt: typeof obj.createdAt === "string" ? obj.createdAt : undefined,
+        category,
+      };
+    });
+  }, []);
 
   useEffect(() => {
     const fetchProducts = async () => {
@@ -55,12 +99,11 @@ export default function AdminProductsPage() {
       try {
         const res = await fetch("/api/products", { cache: "no-store" });
         if (!res.ok) {
-          const msg = `HTTP ${res.status}`;
-          setError(msg);
+          setError(`HTTP ${res.status}`);
           setProducts([]);
           return;
         }
-        const raw = await res.json();
+        const raw = (await res.json()) as unknown;
         const list = normalizeProducts(raw);
         setProducts(list);
       } catch (err) {
@@ -72,7 +115,7 @@ export default function AdminProductsPage() {
       }
     };
     fetchProducts();
-  }, []);
+  }, [normalizeProducts]);
 
   const handleDelete = async (id: number) => {
     if (!confirm("Are you sure you want to delete this product?")) return;
@@ -81,8 +124,17 @@ export default function AdminProductsPage() {
       setProducts((prev) => prev.filter((p) => p.id !== id));
       alert("✅ Product deleted");
     } else {
-      const payload = await res.json().catch(() => ({} as any));
-      alert(`❌ ${payload.error || "Failed to delete product"}`);
+      let message = "Failed to delete product";
+      try {
+        const payload = (await res.json()) as unknown;
+        if (payload && typeof payload === "object" && "error" in (payload as Record<string, unknown>)) {
+          const errText = (payload as Record<string, unknown>).error;
+          if (typeof errText === "string" && errText) message = errText;
+        }
+      } catch {
+        // ignore parse error
+      }
+      alert(`❌ ${message}`);
     }
   };
 
@@ -130,7 +182,7 @@ export default function AdminProductsPage() {
           />
           <select
             value={sort}
-            onChange={(e) => setSort(e.target.value as any)}
+            onChange={(e) => setSort(e.target.value as "name" | "price" | "stock")}
             className="border border-gray-300 px-4 py-2 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"
           >
             <option value="name">Sort by Name</option>
@@ -190,11 +242,16 @@ export default function AdminProductsPage() {
                 <tr key={p.id} className="hover:bg-gray-50 transition">
                   <td className="px-4 py-3">
                     {p.imageUrl ? (
-                      <img
-                        src={p.imageUrl}
-                        alt={p.name}
-                        className="w-14 h-14 object-cover rounded-md border"
-                      />
+                      <div className="relative w-14 h-14">
+                        <Image
+                          src={p.imageUrl}
+                          alt={p.name}
+                          fill
+                          sizes="56px"
+                          className="object-cover rounded-md border"
+                          unoptimized
+                        />
+                      </div>
                     ) : (
                       <span className="text-gray-400">—</span>
                     )}

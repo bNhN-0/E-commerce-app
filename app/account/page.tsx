@@ -5,10 +5,18 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
 
+type UserMetadata = {
+  name?: string;
+  full_name?: string;
+  username?: string;
+  // allow extra keys without using `any`
+  [key: string]: unknown;
+};
+
 type SBUser = {
   email?: string | null;
   created_at?: string;
-  user_metadata?: Record<string, any>;
+  user_metadata?: UserMetadata;
 };
 
 export default function AccountPage() {
@@ -17,27 +25,36 @@ export default function AccountPage() {
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
-      setSbUser(data.user ?? null);
+      const u = data.user;
+      if (!u) {
+        setSbUser(null);
+        return;
+      }
+      // map supabase-js User → our SBUser without `any`
+      setSbUser({
+        email: u.email ?? null,
+        created_at: u.created_at ?? undefined,
+        user_metadata: (u.user_metadata as UserMetadata) ?? undefined,
+      });
     });
   }, []);
 
   const displayName = useMemo(() => {
+    const meta = sbUser?.user_metadata;
     const metaName =
-      (sbUser?.user_metadata?.name as string) ||
-      (sbUser?.user_metadata?.full_name as string) ||
-      (sbUser?.user_metadata?.username as string);
-    if (metaName && metaName.trim()) return metaName.trim();
+      (typeof meta?.name === "string" && meta.name) ||
+      (typeof meta?.full_name === "string" && meta.full_name) ||
+      (typeof meta?.username === "string" && meta.username) ||
+      "";
+    if (metaName.trim()) return metaName.trim();
     const emailLocal = (sbUser?.email || "").split("@")[0];
     return emailLocal || "Your Account";
   }, [sbUser]);
 
   const joinedYear = useMemo(() => {
     if (!sbUser?.created_at) return "";
-    try {
-      return new Date(sbUser.created_at).getFullYear();
-    } catch {
-      return "";
-    }
+    const d = new Date(sbUser.created_at);
+    return Number.isFinite(d.getTime()) ? d.getFullYear() : "";
   }, [sbUser]);
 
   const handleLogout = async () => {
@@ -52,7 +69,7 @@ export default function AccountPage() {
     { href: "/account/purchases", icon: "📦", title: "My Purchases",  desc: "View your order history" },
     { href: "/account/settings",  icon: "⚙️", title: "Settings",      desc: "Customize preferences" },
     { href: "/admin/products",    icon: "🛠️", title: "Admin",         desc: "Manage products (admin only)" },
-  ];
+  ] as const;
 
   return (
     <main className="min-h-[calc(100vh-64px)] bg-gradient-to-b from-[#404BB3] via-indigo-700 to-indigo-900 text-white">
@@ -87,7 +104,6 @@ export default function AccountPage() {
                 Manage your profile, orders, and account settings — all in one place.
               </p>
 
-              {/* Quick stats (placeholders until you wire real counts) */}
               <div className="mt-4 flex flex-wrap gap-2">
                 <Stat label="Orders" value="—" />
                 <Stat label="Saved Addresses" value="—" />
@@ -120,9 +136,7 @@ export default function AccountPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
             {menuItems.map((item, i) => (
               <Link key={i} href={item.href} className="group relative">
-                {/* gradient border shell */}
                 <div className="rounded-2xl p-[1px] bg-gradient-to-br from-white/40 via-blue-200/40 to-white/10">
-                  {/* inner card */}
                   <div className="rounded-2xl bg-white/80 dark:bg-white/10 backdrop-blur-md ring-1 ring-black/5 dark:ring-white/10 p-5 h-full shadow-sm transition-all duration-300 group-hover:shadow-xl group-hover:-translate-y-1">
                     <div className="flex items-start justify-between">
                       <div className="flex items-center gap-3">
@@ -144,7 +158,6 @@ export default function AccountPage() {
                       </span>
                     </div>
 
-                    {/* subtle divider + “Go” chip */}
                     <div className="mt-4 flex items-center justify-between">
                       <div className="h-px w-2/3 bg-gradient-to-r from-black/10 via-black/10 to-transparent dark:from-white/15 dark:via-white/15" />
                       <span className="text-[11px] px-2 py-1 rounded-full bg-black/5 dark:bg-white/10 text-gray-700 dark:text-gray-200">
