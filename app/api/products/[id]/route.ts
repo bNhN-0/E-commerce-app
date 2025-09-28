@@ -5,11 +5,6 @@ import { Prisma } from "@prisma/client";
 
 export const runtime = "nodejs";
 
-// ✅ Use the exact context type Next.js expects
-interface RouteContext {
-  params: { id: string };
-}
-
 // Helper to normalize sync/async params
 async function readId(params: { id: string } | Promise<{ id: string }>): Promise<number> {
   const { id } = await Promise.resolve(params);
@@ -18,7 +13,10 @@ async function readId(params: { id: string } | Promise<{ id: string }>): Promise
 }
 
 // -------------------- GET /api/products/:id --------------------
-export async function GET(_req: Request, { params }: RouteContext): Promise<Response> {
+export async function GET(
+  _req: Request,
+  { params }: { params: { id: string } }
+): Promise<Response> {
   const id = await readId(params);
   if (!Number.isFinite(id)) {
     return NextResponse.json({ error: "Invalid product id" }, { status: 400 });
@@ -67,7 +65,10 @@ type VariantInput = {
 };
 
 // -------------------- PATCH /api/products/:id (ADMIN) --------------------
-export async function PATCH(req: Request, { params }: RouteContext): Promise<Response> {
+export async function PATCH(
+  req: Request,
+  { params }: { params: { id: string } }
+): Promise<Response> {
   const id = await readId(params);
   if (!Number.isFinite(id)) {
     return NextResponse.json({ error: "Invalid product id" }, { status: 400 });
@@ -209,13 +210,16 @@ export async function PATCH(req: Request, { params }: RouteContext): Promise<Res
 }
 
 // -------------------- PUT alias --------------------
-export async function PUT(req: Request, ctx: RouteContext): Promise<Response> {
+export async function PUT(req: Request, ctx: { params: { id: string } }): Promise<Response> {
   return PATCH(req, ctx);
 }
 
 // -------------------- DELETE /api/products/:id --------------------
-export async function DELETE(_req: Request, ctx: RouteContext): Promise<Response> {
-  const id = await readId(ctx.params);
+export async function DELETE(
+  _req: Request,
+  { params }: { params: { id: string } }
+): Promise<Response> {
+  const id = await readId(params);
   if (!Number.isFinite(id)) {
     return NextResponse.json({ error: "Invalid product id" }, { status: 400 });
   }
