@@ -5,24 +5,21 @@ import { Prisma } from "@prisma/client";
 
 export const runtime = "nodejs";
 
-// helper: normalize sync/async params
-async function readId(
-  paramsOrPromise: { id: string } | Promise<{ id: string }>
-): Promise<number> {
-  const { id } = await Promise.resolve(paramsOrPromise);
+// ✅ Use the exact context type Next.js expects
+interface RouteContext {
+  params: { id: string };
+}
+
+// Helper to normalize sync/async params
+async function readId(params: { id: string } | Promise<{ id: string }>): Promise<number> {
+  const { id } = await Promise.resolve(params);
   const n = Number(id);
   return Number.isFinite(n) ? n : NaN;
 }
 
 // -------------------- GET /api/products/:id --------------------
-export async function GET(
-  _req: Request,
-  ctx: { params: { id: string } }
-): Promise<Response> {
-  // Always await params (sync or async)
-  const { id: rawId } = await Promise.resolve(ctx.params);
-  const id = Number(rawId);
-
+export async function GET(_req: Request, { params }: RouteContext): Promise<Response> {
+  const id = await readId(params);
   if (!Number.isFinite(id)) {
     return NextResponse.json({ error: "Invalid product id" }, { status: 400 });
   }
@@ -70,11 +67,8 @@ type VariantInput = {
 };
 
 // -------------------- PATCH /api/products/:id (ADMIN) --------------------
-export async function PATCH(
-  req: Request,
-  ctx: { params: { id: string } } | { params: Promise<{ id: string }> }
-): Promise<Response> {
-  const id = await readId(ctx.params);
+export async function PATCH(req: Request, { params }: RouteContext): Promise<Response> {
+  const id = await readId(params);
   if (!Number.isFinite(id)) {
     return NextResponse.json({ error: "Invalid product id" }, { status: 400 });
   }
@@ -131,7 +125,7 @@ export async function PATCH(
     }
 
     // with variants → upsert logic
-    const variants = body.variants as VariantInput[];
+    const variants = body.variants;
     const createPayload: Prisma.ProductVariantCreateManyInput[] = [];
     const updatePayload: { id: number; data: Prisma.ProductVariantUpdateInput }[] = [];
     const keepIds: number[] = [];
@@ -197,7 +191,7 @@ export async function PATCH(
     });
 
     return NextResponse.json(result);
-  } catch (err: unknown) {
+  } catch (err) {
     if (
       typeof err === "object" &&
       err !== null &&
@@ -215,18 +209,12 @@ export async function PATCH(
 }
 
 // -------------------- PUT alias --------------------
-export async function PUT(
-  req: Request,
-  ctx: { params: { id: string } } | { params: Promise<{ id: string }> }
-): Promise<Response> {
+export async function PUT(req: Request, ctx: RouteContext): Promise<Response> {
   return PATCH(req, ctx);
 }
 
 // -------------------- DELETE /api/products/:id --------------------
-export async function DELETE(
-  _req: Request,
-  ctx: { params: { id: string } } | { params: Promise<{ id: string }> }
-): Promise<Response> {
+export async function DELETE(_req: Request, ctx: RouteContext): Promise<Response> {
   const id = await readId(ctx.params);
   if (!Number.isFinite(id)) {
     return NextResponse.json({ error: "Invalid product id" }, { status: 400 });
@@ -261,7 +249,7 @@ export async function DELETE(
     });
 
     return NextResponse.json({ ok: true });
-  } catch (err: unknown) {
+  } catch (err) {
     console.error("DELETE /products/:id failed", err);
     return NextResponse.json({ error: "Failed to delete product" }, { status: 500 });
   }

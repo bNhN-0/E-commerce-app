@@ -1,262 +1,192 @@
-import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { getUserSession } from "@/lib/auth";
-import { Prisma } from "@prisma/client";
+"use client";
 
-export const runtime = "nodejs";
+import { useEffect, useMemo, useState } from "react";
+import { useParams } from "next/navigation";
+import Image from "next/image";
+import type { User } from "@supabase/supabase-js";
+import { supabase } from "@/lib/supabaseClient";
+import { useCart } from "@/app/components/CartContext";
 
-// -------------------- GET /api/products/:id --------------------
-export async function GET(
-  _req: Request,
-  { params }: { params: Promise<{ id: string }> }
-): Promise<Response> {
-  const { id: rawId } = await params; // 👈 await params
-  const id = Number(rawId);
+type VariantAttributes =
+  | Record<string, unknown>
+  | Array<{ name: string; value: string }>
+  | null;
 
-  if (!Number.isFinite(id)) {
-    return NextResponse.json({ error: "Invalid product id" }, { status: 400 });
-  }
-
-  try {
-    const product = await prisma.product.findUnique({
-      where: { id },
-      select: {
-        id: true,
-        name: true,
-        description: true,
-        price: true,
-        stock: true,
-        imageUrl: true,
-        averageRating: true,
-        reviewCount: true,
-        createdAt: true,
-        categoryId: true,
-        category: { select: { id: true, name: true, type: true } },
-        media: { select: { id: true, url: true, type: true } },
-        variants: {
-          select: { id: true, sku: true, price: true, stock: true, attributes: true },
-          orderBy: { id: "asc" },
-        },
-      },
-    });
-
-    if (!product) {
-      return NextResponse.json({ error: "Product not found" }, { status: 404 });
-    }
-
-    return NextResponse.json(product, { headers: { "Cache-Control": "no-store" } });
-  } catch (err: unknown) {
-    console.error("GET /products/:id failed", err);
-    return NextResponse.json({ error: "Failed to fetch product" }, { status: 500 });
-  }
-}
-
-type VariantInput = {
-  id?: number;
+type Variant = {
+  id: number;
   sku: string;
   price?: number | null;
-  stock?: number;
-  attributes?: unknown;
+  stock: number;
+  attributes?: VariantAttributes;
 };
 
-// -------------------- PATCH /api/products/:id (ADMIN) --------------------
-export async function PATCH(
-  req: Request,
-  { params }: { params: Promise<{ id: string }> }
-): Promise<Response> {
-  const { id: rawId } = await params;
-  const id = Number(rawId);
+type Product = {
+  id: number;
+  name: string;
+  description?: string | null;
+  price: number;
+  stock: number;
+  imageUrl?: string | null;
+  variants?: Variant[];
+};
 
-  if (!Number.isFinite(id)) {
-    return NextResponse.json({ error: "Invalid product id" }, { status: 400 });
-  }
+export default function ProductDetailPage() {
+  const params = useParams<{ id: string }>();
+  const [product, setProduct] = useState<Product | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState<User | null>(null);
+  const [selectedVariant, setSelectedVariant] = useState<Variant | null>(null);
+  const [adding, setAdding] = useState(false);
 
-  const user = await getUserSession();
-  if (!user) return NextResponse.json({ error: "Not logged in" }, { status: 401 });
-  if (user.role !== "ADMIN") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const { applyTotals } = useCart();
 
-  try {
-    const body = (await req.json()) as Partial<{
-      name: string;
-      description?: string | null;
-      price?: number;
-      stock?: number;
-      imageUrl?: string | null;
-      categoryId?: number;
-      variants?: VariantInput[];
-    }>;
+  const money = useMemo(
+    () => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }),
+    []
+  );
 
-    const data: Prisma.ProductUpdateInput = {};
-    if (body.name !== undefined) data.name = body.name;
-    if (body.description !== undefined) data.description = body.description;
-    if (body.price !== undefined) data.price = body.price;
-    if (body.stock !== undefined) data.stock = body.stock;
-    if (body.imageUrl !== undefined) data.imageUrl = body.imageUrl;
-    if (body.categoryId !== undefined) {
-      const catId = Number(body.categoryId);
-      const cat = await prisma.category.findUnique({ where: { id: catId } });
-      if (!cat) return NextResponse.json({ error: "Category not found" }, { status: 404 });
-      data.category = { connect: { id: catId } };
-    }
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data }) => setUser(data.user ?? null));
+  }, []);
 
-    // if no variants provided → update core fields only
-    if (!Array.isArray(body.variants)) {
-      const updated = await prisma.product.update({
-        where: { id },
-        data,
-        select: {
-          id: true,
-          name: true,
-          description: true,
-          price: true,
-          stock: true,
-          imageUrl: true,
-          averageRating: true,
-          reviewCount: true,
-          createdAt: true,
-          category: { select: { id: true, name: true, type: true } },
-          media: { select: { id: true, url: true, type: true } },
-          variants: { select: { id: true, sku: true, price: true, stock: true, attributes: true } },
-        },
-      });
-      return NextResponse.json(updated);
-    }
+  // fetch product
+  useEffect(() => {
+    const id = params?.id;
+    if (!id) return;
 
-    // variants replacement logic
-    const variants = body.variants as VariantInput[];
-    const createPayload: Prisma.ProductVariantCreateManyInput[] = [];
-    const updatePayload: { id: number; data: Prisma.ProductVariantUpdateInput }[] = [];
-    const keepIds: number[] = [];
-
-    for (const v of variants) {
-      const attrs: Prisma.InputJsonValue = (v.attributes as Prisma.InputJsonValue) ?? {};
-      if (v.id) {
-        const vid = Number(v.id);
-        keepIds.push(vid);
-        updatePayload.push({
-          id: vid,
-          data: { sku: v.sku, price: v.price ?? null, stock: v.stock ?? 0, attributes: attrs },
-        });
-      } else {
-        createPayload.push({
-          productId: id,
-          sku: v.sku,
-          price: v.price ?? null,
-          stock: v.stock ?? 0,
-          attributes: attrs,
-        });
+    const fetchProduct = async () => {
+      setLoading(true);
+      try {
+        const res = await fetch(`/api/products/${id}`, { cache: "no-store" });
+        if (!res.ok) throw new Error("Failed to fetch product");
+        const data: Product = await res.json();
+        setProduct(data);
+        const first = data.variants && data.variants.length > 0 ? data.variants[0] : null;
+        setSelectedVariant(first ?? null);
+      } catch (err) {
+        console.error("Failed to fetch product:", err);
+        setProduct(null);
+      } finally {
+        setLoading(false);
       }
+    };
+
+    fetchProduct();
+  }, [params?.id]);
+
+  const formatAttrs = (attrs?: VariantAttributes) => {
+    if (!attrs) return "";
+    if (Array.isArray(attrs)) return attrs.map((a) => `${a.name}: ${a.value}`).join(", ");
+    return Object.entries(attrs).map(([k, v]) => `${k}: ${String(v)}`).join(", ");
+  };
+
+  if (loading) return <p className="p-4">Loading product...</p>;
+  if (!product) return <p className="p-4 text-red-500">Product not found.</p>;
+
+  const effectivePrice = selectedVariant?.price ?? product.price;
+  const effectiveStock = selectedVariant?.stock ?? product.stock;
+
+  const handleAddToCart = async () => {
+    if (adding) return;
+    setAdding(true);
+
+    try {
+      const body =
+        selectedVariant && selectedVariant.id
+          ? { productId: product.id, variantId: selectedVariant.id, qty: 1 }
+          : { productId: product.id, qty: 1 };
+
+      const res = await fetch("/api/cart/add", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        cache: "no-store",
+        body: JSON.stringify(body),
+      });
+
+      if (!res.ok) {
+        const errPayload: { error?: string } = await res.json().catch(() => ({} as { error?: string }));
+        throw new Error(errPayload.error || `Failed to add to cart (${res.status})`);
+      }
+
+      const data: { totals?: { totalItems: number; totalAmount: number } } = await res.json();
+      if (data?.totals) applyTotals(data.totals);
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : "Something went wrong.";
+      console.error(error);
+      alert(msg);
+    } finally {
+      setAdding(false);
     }
+  };
 
-    await prisma.$transaction(
-      async (tx) => {
-        if (Object.keys(data).length > 0) {
-          await tx.product.update({ where: { id }, data });
-        }
-        await tx.productVariant.deleteMany({
-          where: { productId: id, ...(keepIds.length ? { id: { notIn: keepIds } } : {}) },
-        });
-        if (updatePayload.length) {
-          await Promise.all(
-            updatePayload.map((u) =>
-              tx.productVariant.update({ where: { id: u.id }, data: u.data })
-            )
-          );
-        }
-        if (createPayload.length) {
-          await tx.productVariant.createMany({ data: createPayload });
-        }
-      },
-      { timeout: 20_000, maxWait: 10_000 }
-    );
+  return (
+    <div className="p-6 max-w-2xl mx-auto">
+      {product.imageUrl && (
+        <Image
+          src={product.imageUrl}
+          alt={product.name}
+          width={1200}
+          height={600}
+          className="w-full h-64 object-cover rounded mb-4"
+          // Remove if you configure next.config.js images.domains
+          unoptimized
+          priority
+        />
+      )}
 
-    const result = await prisma.product.findUnique({
-      where: { id },
-      select: {
-        id: true,
-        name: true,
-        description: true,
-        price: true,
-        stock: true,
-        imageUrl: true,
-        averageRating: true,
-        reviewCount: true,
-        createdAt: true,
-        category: { select: { id: true, name: true, type: true } },
-        media: { select: { id: true, url: true, type: true } },
-        variants: { select: { id: true, sku: true, price: true, stock: true, attributes: true } },
-      },
-    });
+      <h1 className="text-3xl font-bold mb-2">{product.name}</h1>
+      {product.description && (
+        <p className="text-gray-600 mb-2">{product.description}</p>
+      )}
 
-    return NextResponse.json(result);
-  } catch (err: unknown) {
-    if (
-      typeof err === "object" &&
-      err !== null &&
-      "code" in err &&
-      (err as { code?: string }).code === "P2002"
-    ) {
-      return NextResponse.json(
-        { error: "Unique constraint failed (e.g., duplicate SKU)" },
-        { status: 409 }
-      );
-    }
-    console.error("PATCH /products/:id failed", err);
-    return NextResponse.json({ error: "Failed to update product" }, { status: 500 });
-  }
-}
+      <p className="text-2xl font-semibold mb-2">
+        {money.format(effectivePrice)}
+      </p>
+      <p className="text-sm text-gray-500 mb-4">Stock: {effectiveStock}</p>
 
-// -------------------- PUT alias --------------------
-export async function PUT(
-  req: Request,
-  ctx: { params: Promise<{ id: string }> }
-): Promise<Response> {
-  return PATCH(req, ctx);
-}
+      {/* Variants */}
+      {product.variants && product.variants.length > 0 && (
+        <div className="mb-4">
+          <p className="font-medium mb-2">Choose a Variant:</p>
+          <div className="flex flex-col gap-2">
+            {product.variants.map((v) => {
+              const attrs = formatAttrs(v.attributes);
+              const priceLabel =
+                v.price != null ? money.format(v.price) : money.format(product.price);
+              const isActive = selectedVariant?.id === v.id;
 
-// -------------------- DELETE /api/products/:id --------------------
-export async function DELETE(
-  _req: Request,
-  { params }: { params: Promise<{ id: string }> }
-): Promise<Response> {
-  const { id: rawId } = await params;
-  const id = Number(rawId);
+              return (
+                <button
+                  key={v.id}
+                  onClick={() => setSelectedVariant(v)}
+                  className={`border rounded px-3 py-2 text-left ${
+                    isActive ? "border-blue-500 bg-blue-50" : "border-gray-300"
+                  }`}
+                  title={attrs}
+                >
+                  <div className="text-sm">{attrs || "Variant"}</div>
+                  <div className="text-xs text-gray-500">
+                    SKU: {v.sku} | {priceLabel} | Stock: {v.stock}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
-  if (!Number.isFinite(id)) {
-    return NextResponse.json({ error: "Invalid product id" }, { status: 400 });
-  }
-
-  const user = await getUserSession();
-  if (!user) return NextResponse.json({ error: "Not logged in" }, { status: 401 });
-  if (user.role !== "ADMIN") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-
-  try {
-    const [inCarts, inOrders, inWishlists, reviews] = await Promise.all([
-      prisma.cartItem.count({ where: { productId: id } }),
-      prisma.orderItem.count({ where: { productId: id } }),
-      prisma.wishlistItem.count({ where: { productId: id } }),
-      prisma.review.count({ where: { productId: id } }),
-    ]);
-
-    if (inCarts + inOrders + inWishlists + reviews > 0) {
-      return NextResponse.json(
-        {
-          error: "Product is referenced and cannot be deleted",
-          references: { inCarts, inOrders, inWishlists, reviews },
-        },
-        { status: 409 }
-      );
-    }
-
-    await prisma.$transaction(async (tx) => {
-      await tx.productMedia.deleteMany({ where: { productId: id } });
-      await tx.productVariant.deleteMany({ where: { productId: id } });
-      await tx.product.delete({ where: { id } });
-    });
-
-    return NextResponse.json({ ok: true });
-  } catch (err: unknown) {
-    console.error("DELETE /products/:id failed", err);
-    return NextResponse.json({ error: "Failed to delete product" }, { status: 500 });
-  }
+      {/* Add to Cart */}
+      {user ? (
+        <button
+          onClick={handleAddToCart}
+          disabled={adding || effectiveStock <= 0}
+          className="bg-blue-600 disabled:bg-blue-300 text-white px-4 py-2 rounded w-full"
+        >
+          {adding ? "Adding..." : "🛒 Add to Cart"}
+        </button>
+      ) : (
+        <p className="text-red-500">⚠️ Please log in to add items to cart.</p>
+      )}
+    </div>
+  );
 }
