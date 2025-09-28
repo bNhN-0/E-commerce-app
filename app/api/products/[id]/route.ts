@@ -17,9 +17,12 @@ async function readId(
 // -------------------- GET /api/products/:id --------------------
 export async function GET(
   _req: Request,
-  ctx: { params: { id: string } } | { params: Promise<{ id: string }> }
+  ctx: { params: { id: string } }
 ): Promise<Response> {
-  const id = await readId(ctx.params);
+  // 👇 handle both sync and async params
+  const { id: rawId } = await Promise.resolve(ctx.params);
+  const id = Number(rawId);
+
   if (!Number.isFinite(id)) {
     return NextResponse.json({ error: "Invalid product id" }, { status: 400 });
   }
