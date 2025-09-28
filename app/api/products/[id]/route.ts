@@ -5,12 +5,21 @@ import { Prisma } from "@prisma/client";
 
 export const runtime = "nodejs";
 
+// helper: normalize sync/async params
+async function readId(
+  paramsOrPromise: { id: string } | Promise<{ id: string }>
+): Promise<number> {
+  const { id } = await Promise.resolve(paramsOrPromise);
+  const n = Number(id);
+  return Number.isFinite(n) ? n : NaN;
+}
+
 // -------------------- GET /api/products/:id --------------------
 export async function GET(
   _req: Request,
-  { params }: { params: { id: string } }
+  ctx: { params: { id: string } } | { params: Promise<{ id: string }> }
 ): Promise<Response> {
-  const id = Number(params.id);
+  const id = await readId(ctx.params);
   if (!Number.isFinite(id)) {
     return NextResponse.json({ error: "Invalid product id" }, { status: 400 });
   }
@@ -60,9 +69,9 @@ type VariantInput = {
 // -------------------- PATCH /api/products/:id (ADMIN) --------------------
 export async function PATCH(
   req: Request,
-  { params }: { params: { id: string } }
+  ctx: { params: { id: string } } | { params: Promise<{ id: string }> }
 ): Promise<Response> {
-  const id = Number(params.id);
+  const id = await readId(ctx.params);
   if (!Number.isFinite(id)) {
     return NextResponse.json({ error: "Invalid product id" }, { status: 400 });
   }
@@ -95,6 +104,7 @@ export async function PATCH(
       data.category = { connect: { id: catId } };
     }
 
+    // no variants → update only core fields
     if (!Array.isArray(body.variants)) {
       const updated = await prisma.product.update({
         where: { id },
@@ -117,6 +127,7 @@ export async function PATCH(
       return NextResponse.json(updated);
     }
 
+    // with variants → upsert logic
     const variants = body.variants as VariantInput[];
     const createPayload: Prisma.ProductVariantCreateManyInput[] = [];
     const updatePayload: { id: number; data: Prisma.ProductVariantUpdateInput }[] = [];
@@ -203,7 +214,7 @@ export async function PATCH(
 // -------------------- PUT alias --------------------
 export async function PUT(
   req: Request,
-  ctx: { params: { id: string } }
+  ctx: { params: { id: string } } | { params: Promise<{ id: string }> }
 ): Promise<Response> {
   return PATCH(req, ctx);
 }
@@ -211,9 +222,9 @@ export async function PUT(
 // -------------------- DELETE /api/products/:id --------------------
 export async function DELETE(
   _req: Request,
-  { params }: { params: { id: string } }
+  ctx: { params: { id: string } } | { params: Promise<{ id: string }> }
 ): Promise<Response> {
-  const id = Number(params.id);
+  const id = await readId(ctx.params);
   if (!Number.isFinite(id)) {
     return NextResponse.json({ error: "Invalid product id" }, { status: 400 });
   }
