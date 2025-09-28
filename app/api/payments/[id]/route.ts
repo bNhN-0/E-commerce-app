@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getUserSession } from "@/lib/auth";
 
-// 🔹 helper: safely extract numeric ID from the request URL
+// Helper: extract numeric ID from the URL
 function getIdFromRequest(req: Request): number {
   const url = new URL(req.url);
   const parts = url.pathname.split("/").filter(Boolean);
@@ -10,20 +10,19 @@ function getIdFromRequest(req: Request): number {
 }
 
 // DELETE /api/payments/:id
-export async function DELETE(req: Request): Promise<NextResponse> {
+export async function DELETE(req: Request): Promise<Response> {
+  const user = await getUserSession();
+  if (!user) {
+    return NextResponse.json({ error: "Not logged in" }, { status: 401 });
+  }
+
+  const id = getIdFromRequest(req);
+  if (!Number.isFinite(id) || id <= 0) {
+    return NextResponse.json({ error: "Invalid payment id" }, { status: 400 });
+  }
+
   try {
-    const user = await getUserSession();
-    if (!user) {
-      return NextResponse.json({ error: "Not logged in" }, { status: 401 });
-    }
-
-    const id = getIdFromRequest(req);
-    if (!Number.isFinite(id) || id <= 0) {
-      return NextResponse.json({ error: "Invalid payment id" }, { status: 400 });
-    }
-
     await prisma.paymentMethod.delete({ where: { id } });
-
     return NextResponse.json(
       { success: true },
       { headers: { "Cache-Control": "no-store" } }
