@@ -1,13 +1,7 @@
+// app/api/payments/[id]/route.ts
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getUserSession } from "@/lib/auth";
-
-// Helper: extract numeric ID from the URL
-function getIdFromRequest(req: Request): number {
-  const url = new URL(req.url);
-  const parts = url.pathname.split("/").filter(Boolean);
-  return Number(parts[parts.length - 1] ?? "");
-}
 
 // DELETE /api/payments/:id
 export async function DELETE(req: Request): Promise<Response> {
@@ -16,17 +10,17 @@ export async function DELETE(req: Request): Promise<Response> {
     return NextResponse.json({ error: "Not logged in" }, { status: 401 });
   }
 
-  const id = getIdFromRequest(req);
+  // extract ID from URL
+  const url = new URL(req.url);
+  const id = Number(url.pathname.split("/").pop());
+
   if (!Number.isFinite(id) || id <= 0) {
     return NextResponse.json({ error: "Invalid payment id" }, { status: 400 });
   }
 
   try {
     await prisma.paymentMethod.delete({ where: { id } });
-    return NextResponse.json(
-      { success: true },
-      { headers: { "Cache-Control": "no-store" } }
-    );
+    return NextResponse.json({ success: true });
   } catch (err) {
     console.error("❌ DELETE /api/payments/:id failed", err);
     return NextResponse.json(
