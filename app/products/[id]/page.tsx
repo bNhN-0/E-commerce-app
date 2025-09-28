@@ -2,16 +2,15 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getUserSession } from "@/lib/auth";
 import { Prisma } from "@prisma/client";
-type RouteContext<T extends Record<string, string>> = { params: T };
 
 export const runtime = "nodejs";
 
 // -------------------- GET /api/products/:id --------------------
 export async function GET(
   _req: Request,
-  ctx: RouteContext<{ id: string }>
+  { params }: { params: Promise<{ id: string }> }
 ): Promise<Response> {
-  const { id: rawId } = await Promise.resolve(ctx.params);
+  const { id: rawId } = await params; // 👈 await params
   const id = Number(rawId);
 
   if (!Number.isFinite(id)) {
@@ -46,7 +45,7 @@ export async function GET(
     }
 
     return NextResponse.json(product, { headers: { "Cache-Control": "no-store" } });
-  } catch (err) {
+  } catch (err: unknown) {
     console.error("GET /products/:id failed", err);
     return NextResponse.json({ error: "Failed to fetch product" }, { status: 500 });
   }
@@ -63,9 +62,9 @@ type VariantInput = {
 // -------------------- PATCH /api/products/:id (ADMIN) --------------------
 export async function PATCH(
   req: Request,
-  ctx: RouteContext<{ id: string }>
+  { params }: { params: Promise<{ id: string }> }
 ): Promise<Response> {
-  const { id: rawId } = await Promise.resolve(ctx.params);
+  const { id: rawId } = await params;
   const id = Number(rawId);
 
   if (!Number.isFinite(id)) {
@@ -210,7 +209,7 @@ export async function PATCH(
 // -------------------- PUT alias --------------------
 export async function PUT(
   req: Request,
-  ctx: RouteContext<{ id: string }>
+  ctx: { params: Promise<{ id: string }> }
 ): Promise<Response> {
   return PATCH(req, ctx);
 }
@@ -218,9 +217,9 @@ export async function PUT(
 // -------------------- DELETE /api/products/:id --------------------
 export async function DELETE(
   _req: Request,
-  ctx: RouteContext<{ id: string }>
+  { params }: { params: Promise<{ id: string }> }
 ): Promise<Response> {
-  const { id: rawId } = await Promise.resolve(ctx.params);
+  const { id: rawId } = await params;
   const id = Number(rawId);
 
   if (!Number.isFinite(id)) {
@@ -256,7 +255,7 @@ export async function DELETE(
     });
 
     return NextResponse.json({ ok: true });
-  } catch (err) {
+  } catch (err: unknown) {
     console.error("DELETE /products/:id failed", err);
     return NextResponse.json({ error: "Failed to delete product" }, { status: 500 });
   }
