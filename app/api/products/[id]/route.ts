@@ -5,21 +5,12 @@ import { Prisma } from "@prisma/client";
 
 export const runtime = "nodejs";
 
-// Handle both sync & async params across Next.js versions without `any`
-type SyncCtx = { params: { id: string } };
-type AsyncCtx = { params: Promise<{ id: string }> };
-type Ctx = SyncCtx | AsyncCtx;
-
-const readId = async (ctx: Ctx): Promise<number> => {
-  const params = await Promise.resolve(
-    (ctx as { params: { id: string } | Promise<{ id: string }> }).params
-  );
-  const n = Number(params.id);
-  return Number.isFinite(n) ? n : NaN;
-};
-
-export async function GET(_req: Request, ctx: Ctx) {
-  const id = await readId(ctx);
+// -------------------- GET /api/products/:id --------------------
+export async function GET(
+  _req: Request,
+  { params }: { params: { id: string } }
+): Promise<Response> {
+  const id = Number(params.id);
   if (!Number.isFinite(id)) {
     return NextResponse.json({ error: "Invalid product id" }, { status: 400 });
   }
@@ -52,7 +43,7 @@ export async function GET(_req: Request, ctx: Ctx) {
     }
 
     return NextResponse.json(product, { headers: { "Cache-Control": "no-store" } });
-  } catch (err: unknown) {
+  } catch (err) {
     console.error("GET /products/:id failed", err);
     return NextResponse.json({ error: "Failed to fetch product" }, { status: 500 });
   }
@@ -67,8 +58,11 @@ type VariantInput = {
 };
 
 // -------------------- PATCH /api/products/:id (ADMIN) --------------------
-export async function PATCH(req: Request, ctx: Ctx) {
-  const id = await readId(ctx);
+export async function PATCH(
+  req: Request,
+  { params }: { params: { id: string } }
+): Promise<Response> {
+  const id = Number(params.id);
   if (!Number.isFinite(id)) {
     return NextResponse.json({ error: "Invalid product id" }, { status: 400 });
   }
@@ -85,10 +79,9 @@ export async function PATCH(req: Request, ctx: Ctx) {
       stock?: number;
       imageUrl?: string | null;
       categoryId?: number;
-      variants?: VariantInput[]; // If omitted, only core fields are updated
+      variants?: VariantInput[];
     }>;
 
-    // Build base product update data
     const data: Prisma.ProductUpdateInput = {};
     if (body.name !== undefined) data.name = body.name;
     if (body.description !== undefined) data.description = body.description;
@@ -99,11 +92,9 @@ export async function PATCH(req: Request, ctx: Ctx) {
       const catId = Number(body.categoryId);
       const cat = await prisma.category.findUnique({ where: { id: catId } });
       if (!cat) return NextResponse.json({ error: "Category not found" }, { status: 404 });
-      // Connect by relation (typed, no any)
       data.category = { connect: { id: catId } };
     }
 
-    // If variants not provided at all → only update core fields
     if (!Array.isArray(body.variants)) {
       const updated = await prisma.product.update({
         where: { id },
@@ -126,7 +117,6 @@ export async function PATCH(req: Request, ctx: Ctx) {
       return NextResponse.json(updated);
     }
 
-    // Variants provided → replace semantics (upsert + delete removed)
     const variants = body.variants as VariantInput[];
     const createPayload: Prisma.ProductVariantCreateManyInput[] = [];
     const updatePayload: { id: number; data: Prisma.ProductVariantUpdateInput }[] = [];
@@ -139,12 +129,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
         keepIds.push(vid);
         updatePayload.push({
           id: vid,
-          data: {
-            sku: v.sku,
-            price: v.price ?? null,
-            stock: v.stock ?? 0,
-            attributes: attrs,
-          },
+          data: { sku: v.sku, price: v.price ?? null, stock: v.stock ?? 0, attributes: attrs },
         });
       } else {
         createPayload.push({
@@ -157,17 +142,14 @@ export async function PATCH(req: Request, ctx: Ctx) {
       }
     }
 
-    // Keep the transaction small & fast; no trailing read inside it
     await prisma.$transaction(
       async (tx) => {
         if (Object.keys(data).length > 0) {
           await tx.product.update({ where: { id }, data });
         }
-
         await tx.productVariant.deleteMany({
           where: { productId: id, ...(keepIds.length ? { id: { notIn: keepIds } } : {}) },
         });
-
         if (updatePayload.length) {
           await Promise.all(
             updatePayload.map((u) =>
@@ -175,7 +157,6 @@ export async function PATCH(req: Request, ctx: Ctx) {
             )
           );
         }
-
         if (createPayload.length) {
           await tx.productVariant.createMany({ data: createPayload });
         }
@@ -183,7 +164,6 @@ export async function PATCH(req: Request, ctx: Ctx) {
       { timeout: 20_000, maxWait: 10_000 }
     );
 
-    // Final read outside the transaction
     const result = await prisma.product.findUnique({
       where: { id },
       select: {
@@ -198,17 +178,13 @@ export async function PATCH(req: Request, ctx: Ctx) {
         createdAt: true,
         category: { select: { id: true, name: true, type: true } },
         media: { select: { id: true, url: true, type: true } },
-        variants: {
-          select: { id: true, sku: true, price: true, stock: true, attributes: true },
-          orderBy: { id: "asc" },
-        },
+        variants: { select: { id: true, sku: true, price: true, stock: true, attributes: true } },
       },
     });
 
     return NextResponse.json(result);
-  } catch (err: unknown) {
-    // Unique constraint, e.g., duplicate SKU
-    if (typeof err === "object" && err !== null && "code" in err && (err as { code?: string }).code === "P2002") {
+  } catch (err: any) {
+    if (err?.code === "P2002") {
       return NextResponse.json(
         { error: "Unique constraint failed (e.g., duplicate SKU)" },
         { status: 409 }
@@ -219,13 +195,20 @@ export async function PATCH(req: Request, ctx: Ctx) {
   }
 }
 
-// Support PUT as an alias (your edit page sometimes uses PUT)
-export async function PUT(req: Request, ctx: Ctx) {
+// -------------------- PUT alias --------------------
+export async function PUT(
+  req: Request,
+  ctx: { params: { id: string } }
+): Promise<Response> {
   return PATCH(req, ctx);
 }
 
-export async function DELETE(_req: Request, ctx: Ctx) {
-  const id = await readId(ctx);
+// -------------------- DELETE /api/products/:id --------------------
+export async function DELETE(
+  _req: Request,
+  { params }: { params: { id: string } }
+): Promise<Response> {
+  const id = Number(params.id);
   if (!Number.isFinite(id)) {
     return NextResponse.json({ error: "Invalid product id" }, { status: 400 });
   }
@@ -259,7 +242,7 @@ export async function DELETE(_req: Request, ctx: Ctx) {
     });
 
     return NextResponse.json({ ok: true });
-  } catch (err: unknown) {
+  } catch (err) {
     console.error("DELETE /products/:id failed", err);
     return NextResponse.json({ error: "Failed to delete product" }, { status: 500 });
   }
