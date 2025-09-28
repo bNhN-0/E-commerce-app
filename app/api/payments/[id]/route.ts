@@ -2,12 +2,37 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getUserSession } from "@/lib/auth";
 
-// DELETE payment method
-export async function DELETE(_: Request, { params }: { params: { id: string } }) {
+// helper: extract id from URL
+function getIdFromRequest(req: Request): number {
+  const url = new URL(req.url);
+  const parts = url.pathname.split("/").filter(Boolean);
+  const idStr = parts[parts.length - 1] ?? "";
+  return Number(idStr);
+}
+
+// DELETE /api/payments/:id
+export async function DELETE(req: Request) {
   const user = await getUserSession();
-  if (!user) return NextResponse.json({ error: "Not logged in" }, { status: 401 });
+  if (!user) {
+    return NextResponse.json({ error: "Not logged in" }, { status: 401 });
+  }
 
-  await prisma.paymentMethod.delete({ where: { id: parseInt(params.id) } });
+  const id = getIdFromRequest(req);
+  if (!Number.isFinite(id) || id <= 0) {
+    return NextResponse.json({ error: "Invalid payment id" }, { status: 400 });
+  }
 
-  return NextResponse.json({ success: true });
+  try {
+    await prisma.paymentMethod.delete({ where: { id } });
+    return NextResponse.json(
+      { success: true },
+      { headers: { "Cache-Control": "no-store" } }
+    );
+  } catch (err) {
+    console.error("DELETE /api/payments/:id failed", err);
+    return NextResponse.json(
+      { error: "Failed to delete payment method" },
+      { status: 500 }
+    );
+  }
 }
