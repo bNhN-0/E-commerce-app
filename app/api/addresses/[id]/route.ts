@@ -18,16 +18,21 @@ type AddressUpdatePayload = Partial<{
   label: string;
 }>;
 
-// PUT /api/addresses/:id — update an address (owner-only)
-export async function PUT(
-  req: Request,
-  { params }: { params: { id: string } }
-) {
+// helper: get id from URL pathname
+function getIdFromRequest(req: Request): number {
+  const url = new URL(req.url);
+  const parts = url.pathname.split("/").filter(Boolean);
+  const idStr = parts[parts.length - 1] ?? "";
+  return Number(idStr);
+}
+
+// PUT /api/addresses/:id
+export async function PUT(req: Request) {
   const user = await getUserSession();
   if (!user)
     return NextResponse.json({ error: "Not logged in" }, { status: 401 });
 
-  const id = Number(params.id);
+  const id = getIdFromRequest(req);
   if (!Number.isFinite(id) || id <= 0) {
     return NextResponse.json({ error: "Invalid address id" }, { status: 400 });
   }
@@ -51,10 +56,7 @@ export async function PUT(
   if (body.country !== undefined) data.country = body.country;
 
   try {
-    const updated = await prisma.address.update({
-      where: { id },
-      data,
-    });
+    const updated = await prisma.address.update({ where: { id }, data });
     return NextResponse.json(updated, {
       headers: { "Cache-Control": "no-store" },
     });
@@ -67,16 +69,13 @@ export async function PUT(
   }
 }
 
-// DELETE /api/addresses/:id — delete an address (owner-only)
-export async function DELETE(
-  req: Request,
-  { params }: { params: { id: string } }
-) {
+// DELETE /api/addresses/:id
+export async function DELETE(req: Request) {
   const user = await getUserSession();
   if (!user)
     return NextResponse.json({ error: "Not logged in" }, { status: 401 });
 
-  const id = Number(params.id);
+  const id = getIdFromRequest(req);
   if (!Number.isFinite(id) || id <= 0) {
     return NextResponse.json({ error: "Invalid address id" }, { status: 400 });
   }
