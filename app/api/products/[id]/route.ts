@@ -5,19 +5,21 @@ import { Prisma } from "@prisma/client";
 
 export const runtime = "nodejs";
 
+type RouteParams = Record<string, string | string[] | undefined>;
+type RouteContext = { params?: Promise<RouteParams> };
+
 // Helper to normalize sync/async params
-async function readId(params: { id: string } | Promise<{ id: string }>): Promise<number> {
-  const { id } = await Promise.resolve(params);
-  const n = Number(id);
+async function readId(params: RouteContext["params"]): Promise<number> {
+  const resolved = (await params) ?? {};
+  const rawId = resolved.id;
+  const idValue = Array.isArray(rawId) ? rawId[0] : rawId;
+  const n = Number(idValue);
   return Number.isFinite(n) ? n : NaN;
 }
 
 // -------------------- GET /api/products/:id --------------------
-export async function GET(
-  _req: Request,
-  { params }: { params: { id: string } }
-): Promise<Response> {
-  const id = await readId(params);
+export async function GET(_req: Request, ctx: RouteContext): Promise<Response> {
+  const id = await readId(ctx.params);
   if (!Number.isFinite(id)) {
     return NextResponse.json({ error: "Invalid product id" }, { status: 400 });
   }
@@ -65,11 +67,8 @@ type VariantInput = {
 };
 
 // -------------------- PATCH /api/products/:id (ADMIN) --------------------
-export async function PATCH(
-  req: Request,
-  { params }: { params: { id: string } }
-): Promise<Response> {
-  const id = await readId(params);
+export async function PATCH(req: Request, ctx: RouteContext): Promise<Response> {
+  const id = await readId(ctx.params);
   if (!Number.isFinite(id)) {
     return NextResponse.json({ error: "Invalid product id" }, { status: 400 });
   }
@@ -210,16 +209,16 @@ export async function PATCH(
 }
 
 // -------------------- PUT alias --------------------
-export async function PUT(req: Request, ctx: { params: { id: string } }): Promise<Response> {
+export async function PUT(req: Request, ctx: RouteContext): Promise<Response> {
   return PATCH(req, ctx);
 }
 
 // -------------------- DELETE /api/products/:id --------------------
 export async function DELETE(
   _req: Request,
-  { params }: { params: { id: string } }
+  ctx: RouteContext
 ): Promise<Response> {
-  const id = await readId(params);
+  const id = await readId(ctx.params);
   if (!Number.isFinite(id)) {
     return NextResponse.json({ error: "Invalid product id" }, { status: 400 });
   }
