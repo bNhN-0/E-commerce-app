@@ -2,12 +2,10 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getUserSession } from "@/lib/auth";
 
-// helper: extract id from URL
 function getIdFromRequest(req: Request): number {
   const url = new URL(req.url);
   const parts = url.pathname.split("/").filter(Boolean);
-  const idStr = parts[parts.length - 1] ?? "";
-  return Number(idStr);
+  return Number(parts[parts.length - 1] ?? "");
 }
 
 // DELETE /api/payments/:id
@@ -29,7 +27,7 @@ export async function DELETE(req: Request) {
       { headers: { "Cache-Control": "no-store" } }
     );
   } catch (err) {
-    console.error("DELETE /api/payments/:id failed", err);
+    console.error("❌ DELETE /api/payments/:id failed", err);
     return NextResponse.json(
       { error: "Failed to delete payment method" },
       { status: 500 }
