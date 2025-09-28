@@ -43,7 +43,7 @@ export async function GET(
     }
 
     return NextResponse.json(product, { headers: { "Cache-Control": "no-store" } });
-  } catch (err) {
+  } catch (err: unknown) {
     console.error("GET /products/:id failed", err);
     return NextResponse.json({ error: "Failed to fetch product" }, { status: 500 });
   }
@@ -183,8 +183,13 @@ export async function PATCH(
     });
 
     return NextResponse.json(result);
-  } catch (err: any) {
-    if (err?.code === "P2002") {
+  } catch (err: unknown) {
+    if (
+      typeof err === "object" &&
+      err !== null &&
+      "code" in err &&
+      (err as { code?: string }).code === "P2002"
+    ) {
       return NextResponse.json(
         { error: "Unique constraint failed (e.g., duplicate SKU)" },
         { status: 409 }
@@ -242,7 +247,7 @@ export async function DELETE(
     });
 
     return NextResponse.json({ ok: true });
-  } catch (err) {
+  } catch (err: unknown) {
     console.error("DELETE /products/:id failed", err);
     return NextResponse.json({ error: "Failed to delete product" }, { status: 500 });
   }
