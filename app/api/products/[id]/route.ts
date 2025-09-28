@@ -19,7 +19,7 @@ export async function GET(
   _req: Request,
   ctx: { params: { id: string } }
 ): Promise<Response> {
-  // 👇 handle both sync and async params
+  // Always await params (sync or async)
   const { id: rawId } = await Promise.resolve(ctx.params);
   const id = Number(rawId);
 
@@ -55,7 +55,7 @@ export async function GET(
     }
 
     return NextResponse.json(product, { headers: { "Cache-Control": "no-store" } });
-  } catch (err: unknown) {
+  } catch (err) {
     console.error("GET /products/:id failed", err);
     return NextResponse.json({ error: "Failed to fetch product" }, { status: 500 });
   }
