@@ -37,7 +37,7 @@ export default function RootLayout({
       <body className={`${outfit.className} h-full text-gray-900`}>
         <CartProvider>
           <Navbar />
-          <main>{children}</main>
+             <main className="pt-16 min-h-screen">{children}</main>
         </CartProvider>
       </body>
     </html>

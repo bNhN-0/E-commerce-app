@@ -41,14 +41,13 @@ const heroBanners = [
   },
 ];
 
-// Utility to resolve asset to URL string
 const toSrc = (img: string | { src?: string }) =>
   typeof img === "string" ? img : img?.src || "";
 
 export default function HeroSection() {
   const [index, setIndex] = useState(0);
   const [hovering, setHovering] = useState(false);
-  const [progress, setProgress] = useState(0); // 0–100
+  const [progress, setProgress] = useState(0); 
   const touchStartX = useRef<number | null>(null);
   const autoplayMs = 5000;
 

@@ -3,7 +3,6 @@
 import Footer from "../components/Footer";
 import FeaturesLayout from "../components/FeaturesLayout";
 import HeroSection from "../components/HeroSection";
-import PromoHighlights from "../components/PromoPage";
 
 export default function HomePage() {
   return (
@@ -11,7 +10,6 @@ export default function HomePage() {
  
   
       <HeroSection />
-  
 
   
       <div className="mb-16">

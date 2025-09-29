@@ -3,3 +3,6 @@
   font-family: Outfit;
 }
 
+html, body {
+  min-height: 100%;
+}

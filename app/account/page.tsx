@@ -9,7 +9,7 @@ type UserMetadata = {
   name?: string;
   full_name?: string;
   username?: string;
-  // allow extra keys without using `any`
+  avatar_url?: string;
   [key: string]: unknown;
 };
 
@@ -22,6 +22,11 @@ type SBUser = {
 export default function AccountPage() {
   const router = useRouter();
   const [sbUser, setSbUser] = useState<SBUser | null>(null);
+  const [stats, setStats] = useState({
+    orders: "—",
+    addresses: "—",
+    payments: "—",
+  });
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => {
@@ -30,7 +35,6 @@ export default function AccountPage() {
         setSbUser(null);
         return;
       }
-      // map supabase-js User → our SBUser without `any`
       setSbUser({
         email: u.email ?? null,
         created_at: u.created_at ?? undefined,
@@ -38,6 +42,22 @@ export default function AccountPage() {
       });
     });
   }, []);
+
+  // hydrate stats from APIs
+  useEffect(() => {
+    if (!sbUser) return;
+    Promise.all([
+      fetch("/api/orders").then((r) => r.json()).catch(() => null),
+      fetch("/api/addresses").then((r) => r.json()).catch(() => null),
+      fetch("/api/payments").then((r) => r.json()).catch(() => null),
+    ]).then(([orders, addresses, payments]) => {
+      setStats({
+        orders: orders?.data?.length ?? 0,
+        addresses: addresses?.data?.length ?? 0,
+        payments: payments?.data?.length ?? 0,
+      });
+    });
+  }, [sbUser]);
 
   const displayName = useMemo(() => {
     const meta = sbUser?.user_metadata;
@@ -59,21 +79,51 @@ export default function AccountPage() {
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
-    router.push("/auth");
+    router.replace("/auth/login");
   };
 
   const menuItems = [
-    { href: "/account/profile",   icon: "👤", title: "Profile",       desc: "Manage your personal details" },
-    { href: "/account/addresses", icon: "🏠", title: "Addresses",     desc: "Saved shipping locations" },
-    { href: "/account/payments",  icon: "💳", title: "Banks & Cards", desc: "Manage your payment methods" },
-    { href: "/account/purchases", icon: "📦", title: "My Purchases",  desc: "View your order history" },
-    { href: "/account/settings",  icon: "⚙️", title: "Settings",      desc: "Customize preferences" },
-    { href: "/admin/products",    icon: "🛠️", title: "Admin",         desc: "Manage products (admin only)" },
+    {
+      href: "/account/profile",
+      icon: "👤",
+      title: "Profile",
+      desc: "Manage your personal details",
+    },
+    {
+      href: "/account/addresses",
+      icon: "🏠",
+      title: "Addresses",
+      desc: "Saved shipping locations",
+    },
+    {
+      href: "/account/payments",
+      icon: "💳",
+      title: "Banks & Cards",
+      desc: "Manage your payment methods",
+    },
+    {
+      href: "/account/purchases",
+      icon: "📦",
+      title: "My Purchases",
+      desc: "View your order history",
+    },
+    {
+      href: "/account/settings",
+      icon: "⚙️",
+      title: "Settings",
+      desc: "Customize preferences",
+    },
+    {
+      href: "/admin/products",
+      icon: "🛠️",
+      title: "Admin",
+      desc: "Manage products (admin only)",
+    },
   ] as const;
 
   return (
-    <main className="min-h-[calc(100vh-64px)] bg-gradient-to-b from-[#404BB3] via-indigo-700 to-indigo-900 text-white">
-      {/* Decorative background */}
+
+    <main className="pt-16 min-h-screen bg-gradient-to-b from-indigo-600 via-indigo-700 to-indigo-900 text-white">
       <div className="pointer-events-none absolute inset-0 -z-10 opacity-30">
         <div className="absolute -top-24 -left-16 h-72 w-72 rounded-full bg-white/20 blur-3xl" />
         <div className="absolute top-40 right-0 h-80 w-80 rounded-full bg-blue-400/20 blur-3xl" />
@@ -83,10 +133,16 @@ export default function AccountPage() {
         {/* Hero / Header */}
         <section className="rounded-3xl bg-white/10 backdrop-blur-md ring-1 ring-white/15 p-6 md:p-8 shadow-lg">
           <div className="flex flex-col md:flex-row md:items-center gap-6">
-            {/* Avatar bubble */}
             <div className="relative h-20 w-20 md:h-24 md:w-24 shrink-0 rounded-full ring-2 ring-white/30 overflow-hidden">
-              <div className="absolute inset-0 bg-gradient-to-br from-indigo-300 to-blue-400" />
-              {/* If you store avatar URL, place an <img> here */}
+              {sbUser?.user_metadata?.avatar_url ? (
+                <img
+                  src={sbUser.user_metadata.avatar_url}
+                  alt="Avatar"
+                  className="absolute inset-0 object-cover"
+                />
+              ) : (
+                <div className="absolute inset-0 bg-gradient-to-br from-indigo-300 to-blue-400" />
+              )}
             </div>
 
             {/* Identity / Stats */}
@@ -101,13 +157,14 @@ export default function AccountPage() {
               </div>
 
               <p className="mt-1 text-white/80 text-sm">
-                Manage your profile, orders, and account settings — all in one place.
+                Manage your profile, orders, and account settings — all in one
+                place.
               </p>
 
               <div className="mt-4 flex flex-wrap gap-2">
-                <Stat label="Orders" value="—" />
-                <Stat label="Saved Addresses" value="—" />
-                <Stat label="Payment Methods" value="—" />
+                <Stat label="Orders" value={stats.orders} />
+                <Stat label="Saved Addresses" value={stats.addresses} />
+                <Stat label="Payment Methods" value={stats.payments} />
               </div>
             </div>
 
@@ -131,9 +188,11 @@ export default function AccountPage() {
 
         {/* Menu grid */}
         <section className="mt-8">
-          <h2 className="mb-3 text-sm uppercase tracking-wide text-white/70">Account</h2>
+          <h2 className="mb-3 text-sm uppercase tracking-wide text-white/70">
+            Account
+          </h2>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
             {menuItems.map((item, i) => (
               <Link key={i} href={item.href} className="group relative">
                 <div className="rounded-2xl p-[1px] bg-gradient-to-br from-white/40 via-blue-200/40 to-white/10">
@@ -154,7 +213,7 @@ export default function AccountPage() {
                       </div>
 
                       <span className="mt-1 opacity-60 transition group-hover:translate-x-1">
-                        <Arrow />
+                        ➜
                       </span>
                     </div>
 
@@ -179,22 +238,8 @@ export default function AccountPage() {
 function Stat({ label, value }: { label: string; value: string | number }) {
   return (
     <div className="px-3 py-1.5 rounded-full text-xs font-medium bg-white/10 ring-1 ring-white/20">
-      <span className="opacity-80">{label}:</span> <span className="ml-1">{value}</span>
+      <span className="opacity-80">{label}:</span>{" "}
+      <span className="ml-1">{value}</span>
     </div>
-  );
-}
-
-function Arrow() {
-  return (
-    <svg viewBox="0 0 24 24" className="h-5 w-5">
-      <path
-        d="M7 12h10M13 8l4 4-4 4"
-        className="stroke-current"
-        strokeWidth="2"
-        fill="none"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
   );
 }
