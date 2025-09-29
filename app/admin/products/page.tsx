@@ -1,6 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ChangeEvent,
+} from "react";
 import Link from "next/link";
 import Image from "next/image";
 
@@ -31,14 +37,22 @@ const pickArray = (raw: unknown): unknown[] => {
     }
 
     const items = obj["items"];
-    if (items && typeof items === "object" && Array.isArray((items as Record<string, unknown>)["data"])) {
+    if (
+      items &&
+      typeof items === "object" &&
+      Array.isArray((items as Record<string, unknown>)["data"])
+    ) {
       return (items as Record<string, unknown>)["data"] as unknown[];
     }
 
     const edges = obj["edges"];
     if (Array.isArray(edges)) {
       const nodes = edges
-        .map((e) => (typeof e === "object" && e ? (e as Record<string, unknown>)["node"] : undefined))
+        .map((e) =>
+          typeof e === "object" && e
+            ? (e as Record<string, unknown>)["node"]
+            : undefined
+        )
         .filter((n): n is unknown => n !== undefined);
       if (nodes.length) return nodes;
     }
@@ -54,6 +68,21 @@ const toNumber = (v: unknown, fallback = 0) => {
 const toString = (v: unknown, fallback = "") =>
   typeof v === "string" ? v : v == null ? fallback : String(v);
 
+// NEW: unwrap `{ data: [...] }` safely without `any`
+function unwrapData(raw: unknown): unknown {
+  if (typeof raw === "object" && raw !== null) {
+    const obj = raw as { data?: unknown };
+    if (Array.isArray(obj.data)) return obj.data;
+  }
+  return raw;
+}
+
+// NEW: strong parser for the status filter
+function parseStatusFilter(v: string): "ALL" | ProductStatus {
+  if (v === "ALL" || v === "ACTIVE" || v === "INACTIVE" || v === "DELETED") return v;
+  return "ALL";
+}
+
 export default function AdminProductsPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
@@ -61,7 +90,7 @@ export default function AdminProductsPage() {
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<"name" | "price" | "stock">("name");
   const [filterCategory, setFilterCategory] = useState("all");
-  const [statusFilter, setStatusFilter] = useState<"ALL" | ProductStatus>("ALL"); // 👈
+  const [statusFilter, setStatusFilter] = useState<"ALL" | ProductStatus>("ALL");
 
   const normalizeProducts = useCallback((data: unknown): Product[] => {
     return pickArray(data).map((p) => {
@@ -75,18 +104,23 @@ export default function AdminProductsPage() {
           }
         : undefined;
 
-      // status default to ACTIVE if missing (older data)
       const rawStatus = toString(obj.status ?? "ACTIVE") as ProductStatus;
 
       return {
         id: toNumber(obj.id),
         name: toString(obj.name),
-        description: typeof obj.description === "string" ? obj.description : undefined,
+        description:
+          typeof obj.description === "string" ? obj.description : undefined,
         price: toNumber(obj.price),
         stock: toNumber(obj.stock),
-        imageUrl: typeof obj.imageUrl === "string" ? obj.imageUrl : undefined,
-        createdAt: typeof obj.createdAt === "string" ? obj.createdAt : undefined,
-        status: (rawStatus === "INACTIVE" || rawStatus === "DELETED") ? rawStatus : "ACTIVE",
+        imageUrl:
+          typeof obj.imageUrl === "string" ? obj.imageUrl : undefined,
+        createdAt:
+          typeof obj.createdAt === "string" ? obj.createdAt : undefined,
+        status:
+          rawStatus === "INACTIVE" || rawStatus === "DELETED"
+            ? rawStatus
+            : "ACTIVE",
         category,
       };
     });
@@ -98,16 +132,23 @@ export default function AdminProductsPage() {
       setLoading(true);
       setError(null);
       try {
-        const qs = new URLSearchParams({ scope: "admin", page: "1", limit: "100" });
+        const qs = new URLSearchParams({
+          scope: "admin",
+          page: "1",
+          limit: "100",
+        });
         if (statusFilter !== "ALL") qs.set("status", statusFilter);
-        const res = await fetch(`/api/products?${qs.toString()}`, { cache: "no-store" });
+        const res = await fetch(`/api/products?${qs.toString()}`, {
+          cache: "no-store",
+        });
         if (!res.ok) {
           setError(`HTTP ${res.status}`);
           setProducts([]);
           return;
         }
-        const raw = (await res.json()) as unknown;
-        const list = normalizeProducts(raw && (raw as any).data ? (raw as any).data : raw);
+        const apiJson = (await res.json()) as unknown;
+        const payload = unwrapData(apiJson); // ✅ no any
+        const list = normalizeProducts(payload);
         setProducts(list);
       } catch (err) {
         console.error("Failed to fetch products:", err);
@@ -128,16 +169,15 @@ export default function AdminProductsPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: next }),
       });
-      const data = await res.json();
+      const data = (await res.json()) as Partial<Product>;
       if (!res.ok) {
-        alert(`❌ ${data?.error || "Failed to update status"}`);
+        alert(`❌ ${(data as { error?: string })?.error || "Failed to update status"}`);
         return;
       }
       setProducts((prev) =>
         prev.map((p) => (p.id === id ? { ...p, status: data.status ?? next } : p))
       );
       alert(`✅ Status updated to ${next}`);
-      // If we are not showing this status, remove from list
       if (statusFilter !== "ALL" && statusFilter !== next) {
         setProducts((prev) => prev.filter((p) => p.id !== id));
       }
@@ -149,13 +189,13 @@ export default function AdminProductsPage() {
 
   // Soft delete (set DELETED)
   const handleDelete = async (id: number) => {
-    if (!confirm("Are you sure you want to remove this product? (soft delete)")) return;
+    if (!confirm("Are you sure you want to remove this product? (soft delete)"))
+      return;
     try {
       const res = await fetch(`/api/products/${id}`, { method: "DELETE" });
-      const payload = await res.json();
+      const payload = (await res.json()) as { message?: string; error?: string };
       if (res.ok) {
         alert(`✅ ${payload?.message || "Product removed"}`);
-        // reflect in UI
         if (statusFilter === "ALL" || statusFilter === "DELETED") {
           setProducts((prev) =>
             prev.map((p) => (p.id === id ? { ...p, status: "DELETED" } : p))
@@ -185,7 +225,9 @@ export default function AdminProductsPage() {
     const term = search.trim().toLowerCase();
     return products
       .filter((p) => (term ? p.name.toLowerCase().includes(term) : true))
-      .filter((p) => (filterCategory === "all" ? true : p.category?.name === filterCategory))
+      .filter((p) =>
+        filterCategory === "all" ? true : p.category?.name === filterCategory
+      )
       .sort((a, b) => {
         if (sort === "price") return a.price - b.price;
         if (sort === "stock") return a.stock - b.stock;
@@ -197,11 +239,14 @@ export default function AdminProductsPage() {
 
   return (
     <div className="p-6">
-      <h1 className="text-2xl font-bold mb-6 text-gray-800">⚙️ Admin Panel – Products</h1>
+      <h1 className="text-2xl font-bold mb-6 text-gray-800">
+        ⚙️ Admin Panel – Products
+      </h1>
 
       {error && (
         <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
-          {error} — check your <code>/api/products?scope=admin</code> response shape.
+          {error} — check your <code>/api/products?scope=admin</code> response
+          shape.
         </div>
       )}
 
@@ -216,7 +261,9 @@ export default function AdminProductsPage() {
           />
           <select
             value={sort}
-            onChange={(e) => setSort(e.target.value as "name" | "price" | "stock")}
+            onChange={(e) =>
+              setSort(e.target.value as "name" | "price" | "stock")
+            }
             className="border border-gray-300 px-4 py-2 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"
           >
             <option value="name">Sort by Name</option>
@@ -237,7 +284,9 @@ export default function AdminProductsPage() {
           </select>
           <select
             value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value as any)}
+            onChange={(e: ChangeEvent<HTMLSelectElement>) =>
+              setStatusFilter(parseStatusFilter(e.target.value))
+            } // ✅ no any
             className="border border-gray-300 px-4 py-2 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"
             title="Filter by status"
           >
@@ -279,7 +328,7 @@ export default function AdminProductsPage() {
                 <th className="px-4 py-3">Price</th>
                 <th className="px-4 py-3">Stock</th>
                 <th className="px-4 py-3">Category</th>
-                <th className="px-4 py-3">Status</th>{/* 👈 */}
+                <th className="px-4 py-3">Status</th>
                 <th className="px-4 py-3 text-center">Actions</th>
               </tr>
             </thead>
@@ -302,7 +351,9 @@ export default function AdminProductsPage() {
                       <span className="text-gray-400">—</span>
                     )}
                   </td>
-                  <td className="px-4 py-3 font-medium text-gray-800">{p.name}</td>
+                  <td className="px-4 py-3 font-medium text-gray-800">
+                    {p.name}
+                  </td>
                   <td className="px-4 py-3 text-gray-700">${p.price}</td>
                   <td className="px-4 py-3">
                     <span
@@ -317,7 +368,9 @@ export default function AdminProductsPage() {
                       {p.stock}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-blue-600">{p.category ? p.category.name : "—"}</td>
+                  <td className="px-4 py-3 text-blue-600">
+                    {p.category ? p.category.name : "—"}
+                  </td>
                   <td className="px-4 py-3">
                     <span
                       className={`px-2 py-1 rounded-full text-xs font-medium ${
