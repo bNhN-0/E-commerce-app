@@ -1,14 +1,14 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getUserSession } from "@/lib/auth";
-import { Prisma, $Enums } from "@prisma/client";
+import type { Prisma, ProductStatus } from "@prisma/client";
 
 export const runtime = "nodejs";
 
 type RouteParams = Record<string, string | string[] | undefined>;
 type RouteContext = { params?: Promise<RouteParams> };
 
-// Helper to normalize sync/async params
+// Normalize sync/async params
 async function readId(params: RouteContext["params"]): Promise<number> {
   const resolved = (await params) ?? {};
   const rawId = resolved.id;
@@ -17,11 +17,11 @@ async function readId(params: RouteContext["params"]): Promise<number> {
   return Number.isFinite(n) ? n : NaN;
 }
 
-function parseStatus(s: unknown): $Enums.ProductStatus | undefined {
+function parseStatus(s: unknown): ProductStatus | undefined {
   if (typeof s !== "string") return undefined;
   const up = s.toUpperCase();
   return up === "ACTIVE" || up === "INACTIVE" || up === "DELETED"
-    ? (up as $Enums.ProductStatus)
+    ? (up as ProductStatus)
     : undefined;
 }
 
@@ -45,7 +45,7 @@ export async function GET(_req: Request, ctx: RouteContext): Promise<Response> {
         averageRating: true,
         reviewCount: true,
         createdAt: true,
-        status: true, // 👈 include status
+        status: true, // include status
         categoryId: true,
         category: { select: { id: true, name: true, type: true } },
         media: { select: { id: true, url: true, type: true } },
@@ -60,13 +60,13 @@ export async function GET(_req: Request, ctx: RouteContext): Promise<Response> {
       return NextResponse.json({ error: "Product not found" }, { status: 404 });
     }
 
-    // Non-admins shouldn't see INACTIVE/DELETED products
+    // Hide non-ACTIVE products from non-admins
     let isAdmin = false;
     try {
       const user = await getUserSession();
       isAdmin = user?.role === "ADMIN";
     } catch {
-      // ignore
+      /* noop */
     }
     if (!isAdmin && product.status !== "ACTIVE") {
       return NextResponse.json({ error: "Product not found" }, { status: 404 });
@@ -107,7 +107,7 @@ export async function PATCH(req: Request, ctx: RouteContext): Promise<Response> 
       imageUrl?: string | null;
       categoryId?: number;
       variants?: VariantInput[];
-      status?: $Enums.ProductStatus | string; // 👈 allow status update
+      status?: ProductStatus | string; // allow status update
     }>;
 
     const data: Prisma.ProductUpdateInput = {};
@@ -253,7 +253,6 @@ export async function DELETE(_req: Request, ctx: RouteContext): Promise<Response
   if (user.role !== "ADMIN") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   try {
-    // Soft delete regardless of references
     const updated = await prisma.product.update({
       where: { id },
       data: { status: "DELETED" },
