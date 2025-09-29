@@ -3,37 +3,38 @@
 import Footer from "../components/Footer";
 import FeaturesLayout from "../components/FeaturesLayout";
 import HeroSection from "../components/HeroSection";
+import BestSellers from "../components/BestSellers";
+import PromoBanner from "../components/PromoBanner";
+import Testimonials from "../components/Testimonials";
+import NewsletterCTA from "../components/NewslettCTA";
 
 export default function HomePage() {
   return (
-    <main className="w-full">
- 
-  
+    <main className="w-full text-gray-900">
+      {/* Hero */}
       <HeroSection />
 
-  
-      <div className="mb-16">
+      {/* Featured Benefits / Features */}
+      <section className="mb-16">
         <FeaturesLayout />
-      </div>
+      </section>
 
-      <section className="container mx-auto px-4 grid grid-cols-1 md:grid-cols-3 gap-6 mb-16">
-        <div className="flex flex-col items-center p-6 bg-white/70 backdrop-blur-md rounded-xl shadow-sm hover:shadow-md transition text-center">
-          🚚
-          <p className="font-semibold mt-2 text-lg">Free Shipping</p>
-          <p className="text-sm text-gray-700">On all orders over $50</p>
-        </div>
+      {/* Promotional Banner */}
+      <PromoBanner />
 
-        <div className="flex flex-col items-center p-6 bg-white/70 backdrop-blur-md rounded-xl shadow-sm hover:shadow-md transition text-center">
-          🔒
-          <p className="font-semibold mt-2 text-lg">Secure Payment</p>
-          <p className="text-sm text-gray-700">100% safe & encrypted</p>
-        </div>
+      {/* Best Sellers */}
+      <section className="py-12">
+        <BestSellers />
+      </section>
 
-        <div className="flex flex-col items-center p-6 bg-white/70 backdrop-blur-md rounded-xl shadow-sm hover:shadow-md transition text-center">
-          📞
-          <p className="font-semibold mt-2 text-lg">24/7 Support</p>
-          <p className="text-sm text-gray-700">We’re here to help anytime</p>
-        </div>
+      {/* Testimonials */}
+      <section className="py-12 bg-white">
+        <Testimonials />
+      </section>
+
+      {/* Newsletter / CTA */}
+      <section className="py-16 bg-indigo-600 text-white">
+        <NewsletterCTA />
       </section>
 
       {/* Footer */}

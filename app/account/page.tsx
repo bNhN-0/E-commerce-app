@@ -197,7 +197,7 @@ export default function AccountPage() {
             {menuItems.map((item, i) => (
               <Link key={i} href={item.href} className="group relative">
                 <div className="rounded-2xl p-[1px] bg-gradient-to-br from-white/40 via-blue-200/40 to-white/10">
-                  <div className="rounded-2xl bg-white/80 dark:bg-white/10 backdrop-blur-md ring-1 ring-black/5 dark:ring-white/10 p-5 h-full shadow-sm transition-all duration-300 group-hover:shadow-xl group-hover:-translate-y-1">
+                  <div className="rounded-2xl bg-white/80 dark:bg-white/10 backdrop-blur-md ring-1 ring-black/5 dark:ring-black/10 p-5 h-full shadow-sm transition-all duration-300 group-hover:shadow-xl group-hover:-translate-y-1">
                     <div className="flex items-start justify-between">
                       <div className="flex items-center gap-3">
                         <span className="grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br from-indigo-500 to-blue-500 shadow-sm">
