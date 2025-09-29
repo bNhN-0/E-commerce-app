@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getUserSession } from "@/lib/auth";
-import { Prisma } from "@prisma/client";
+import { Prisma, $Enums } from "@prisma/client";
 
 export const runtime = "nodejs";
 
@@ -15,6 +15,14 @@ async function readId(params: RouteContext["params"]): Promise<number> {
   const idValue = Array.isArray(rawId) ? rawId[0] : rawId;
   const n = Number(idValue);
   return Number.isFinite(n) ? n : NaN;
+}
+
+function parseStatus(s: unknown): $Enums.ProductStatus | undefined {
+  if (typeof s !== "string") return undefined;
+  const up = s.toUpperCase();
+  return up === "ACTIVE" || up === "INACTIVE" || up === "DELETED"
+    ? (up as $Enums.ProductStatus)
+    : undefined;
 }
 
 // -------------------- GET /api/products/:id --------------------
@@ -37,6 +45,7 @@ export async function GET(_req: Request, ctx: RouteContext): Promise<Response> {
         averageRating: true,
         reviewCount: true,
         createdAt: true,
+        status: true, // 👈 include status
         categoryId: true,
         category: { select: { id: true, name: true, type: true } },
         media: { select: { id: true, url: true, type: true } },
@@ -48,6 +57,18 @@ export async function GET(_req: Request, ctx: RouteContext): Promise<Response> {
     });
 
     if (!product) {
+      return NextResponse.json({ error: "Product not found" }, { status: 404 });
+    }
+
+    // Non-admins shouldn't see INACTIVE/DELETED products
+    let isAdmin = false;
+    try {
+      const user = await getUserSession();
+      isAdmin = user?.role === "ADMIN";
+    } catch {
+      // ignore
+    }
+    if (!isAdmin && product.status !== "ACTIVE") {
       return NextResponse.json({ error: "Product not found" }, { status: 404 });
     }
 
@@ -86,6 +107,7 @@ export async function PATCH(req: Request, ctx: RouteContext): Promise<Response> 
       imageUrl?: string | null;
       categoryId?: number;
       variants?: VariantInput[];
+      status?: $Enums.ProductStatus | string; // 👈 allow status update
     }>;
 
     const data: Prisma.ProductUpdateInput = {};
@@ -94,6 +116,7 @@ export async function PATCH(req: Request, ctx: RouteContext): Promise<Response> 
     if (body.price !== undefined) data.price = body.price;
     if (body.stock !== undefined) data.stock = body.stock;
     if (body.imageUrl !== undefined) data.imageUrl = body.imageUrl;
+
     if (body.categoryId !== undefined) {
       const catId = Number(body.categoryId);
       const cat = await prisma.category.findUnique({ where: { id: catId } });
@@ -101,7 +124,10 @@ export async function PATCH(req: Request, ctx: RouteContext): Promise<Response> 
       data.category = { connect: { id: catId } };
     }
 
-    // no variants → update only core fields
+    const statusParsed = parseStatus(body.status);
+    if (statusParsed) data.status = statusParsed;
+
+    // no variants → update only core fields/status
     if (!Array.isArray(body.variants)) {
       const updated = await prisma.product.update({
         where: { id },
@@ -116,6 +142,7 @@ export async function PATCH(req: Request, ctx: RouteContext): Promise<Response> 
           averageRating: true,
           reviewCount: true,
           createdAt: true,
+          status: true,
           category: { select: { id: true, name: true, type: true } },
           media: { select: { id: true, url: true, type: true } },
           variants: { select: { id: true, sku: true, price: true, stock: true, attributes: true } },
@@ -184,6 +211,7 @@ export async function PATCH(req: Request, ctx: RouteContext): Promise<Response> 
         averageRating: true,
         reviewCount: true,
         createdAt: true,
+        status: true,
         category: { select: { id: true, name: true, type: true } },
         media: { select: { id: true, url: true, type: true } },
         variants: { select: { id: true, sku: true, price: true, stock: true, attributes: true } },
@@ -213,11 +241,8 @@ export async function PUT(req: Request, ctx: RouteContext): Promise<Response> {
   return PATCH(req, ctx);
 }
 
-// -------------------- DELETE /api/products/:id --------------------
-export async function DELETE(
-  _req: Request,
-  ctx: RouteContext
-): Promise<Response> {
+// -------------------- DELETE /api/products/:id (soft delete) --------------------
+export async function DELETE(_req: Request, ctx: RouteContext): Promise<Response> {
   const id = await readId(ctx.params);
   if (!Number.isFinite(id)) {
     return NextResponse.json({ error: "Invalid product id" }, { status: 400 });
@@ -228,30 +253,17 @@ export async function DELETE(
   if (user.role !== "ADMIN") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   try {
-    const [inCarts, inOrders, inWishlists, reviews] = await Promise.all([
-      prisma.cartItem.count({ where: { productId: id } }),
-      prisma.orderItem.count({ where: { productId: id } }),
-      prisma.wishlistItem.count({ where: { productId: id } }),
-      prisma.review.count({ where: { productId: id } }),
-    ]);
-
-    if (inCarts + inOrders + inWishlists + reviews > 0) {
-      return NextResponse.json(
-        {
-          error: "Product is referenced and cannot be deleted",
-          references: { inCarts, inOrders, inWishlists, reviews },
-        },
-        { status: 409 }
-      );
-    }
-
-    await prisma.$transaction(async (tx) => {
-      await tx.productMedia.deleteMany({ where: { productId: id } });
-      await tx.productVariant.deleteMany({ where: { productId: id } });
-      await tx.product.delete({ where: { id } });
+    // Soft delete regardless of references
+    const updated = await prisma.product.update({
+      where: { id },
+      data: { status: "DELETED" },
+      select: { id: true, name: true, status: true },
     });
 
-    return NextResponse.json({ ok: true });
+    return NextResponse.json({
+      ok: true,
+      message: `Product "${updated.name}" has been removed (status: ${updated.status}).`,
+    });
   } catch (err) {
     console.error("DELETE /products/:id failed", err);
     return NextResponse.json({ error: "Failed to delete product" }, { status: 500 });

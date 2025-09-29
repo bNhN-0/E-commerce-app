@@ -79,6 +79,12 @@ enum CategoryType {
   SPORTS_OUTDOORS
 }
 
+enum ProductStatus {
+  ACTIVE
+  INACTIVE
+  DELETED
+}
+
 model Product {
   id             Int             @id @default(autoincrement())
   name           String
@@ -97,16 +103,12 @@ model Product {
   wishlistItems  WishlistItem[]
   createdAt      DateTime        @default(now())
 
-  // Denormalized aggregates for fast reads
+  status         ProductStatus   @default(ACTIVE) 
+
   averageRating  Float?          @default(0)
   reviewCount    Int             @default(0)
-
-  @@index([name])
-  @@index([categoryId])
-  @@index([createdAt])
-  @@index([price]) 
-  @@index([stock])  
 }
+
 
 model ProductVariant {
   id         Int      @id @default(autoincrement())

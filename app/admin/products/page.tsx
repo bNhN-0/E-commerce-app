@@ -5,13 +5,16 @@ import Link from "next/link";
 import Image from "next/image";
 
 type CategoryInfo = { id: number; name: string; type: string };
+type ProductStatus = "ACTIVE" | "INACTIVE" | "DELETED";
 type Product = {
   id: number;
   name: string;
+  description?: string;
   price: number;
   stock: number;
   imageUrl?: string;
   createdAt?: string;
+  status: ProductStatus;
   category?: CategoryInfo;
 };
 
@@ -22,29 +25,20 @@ const pickArray = (raw: unknown): unknown[] => {
   if (typeof raw === "object" && raw !== null) {
     const obj = raw as Record<string, unknown>;
 
-    // direct keys that may contain arrays
     for (const k of ["products", "items", "data", "rows", "result", "list"]) {
       const v = obj[k];
       if (Array.isArray(v)) return v;
     }
 
-    // nested items.data
     const items = obj["items"];
     if (items && typeof items === "object" && Array.isArray((items as Record<string, unknown>)["data"])) {
       return (items as Record<string, unknown>)["data"] as unknown[];
     }
 
-    // Graph-like { edges: [{ node: {...} }] }
     const edges = obj["edges"];
     if (Array.isArray(edges)) {
       const nodes = edges
-        .map((e) => {
-          if (typeof e === "object" && e !== null) {
-            const r = e as Record<string, unknown>;
-            return r["node"];
-          }
-          return undefined;
-        })
+        .map((e) => (typeof e === "object" && e ? (e as Record<string, unknown>)["node"] : undefined))
         .filter((n): n is unknown => n !== undefined);
       if (nodes.length) return nodes;
     }
@@ -67,6 +61,7 @@ export default function AdminProductsPage() {
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<"name" | "price" | "stock">("name");
   const [filterCategory, setFilterCategory] = useState("all");
+  const [statusFilter, setStatusFilter] = useState<"ALL" | ProductStatus>("ALL"); // 👈
 
   const normalizeProducts = useCallback((data: unknown): Product[] => {
     return pickArray(data).map((p) => {
@@ -80,31 +75,39 @@ export default function AdminProductsPage() {
           }
         : undefined;
 
+      // status default to ACTIVE if missing (older data)
+      const rawStatus = toString(obj.status ?? "ACTIVE") as ProductStatus;
+
       return {
         id: toNumber(obj.id),
         name: toString(obj.name),
+        description: typeof obj.description === "string" ? obj.description : undefined,
         price: toNumber(obj.price),
         stock: toNumber(obj.stock),
         imageUrl: typeof obj.imageUrl === "string" ? obj.imageUrl : undefined,
         createdAt: typeof obj.createdAt === "string" ? obj.createdAt : undefined,
+        status: (rawStatus === "INACTIVE" || rawStatus === "DELETED") ? rawStatus : "ACTIVE",
         category,
       };
     });
   }, []);
 
+  // Fetch products with admin scope + status filter
   useEffect(() => {
     const fetchProducts = async () => {
       setLoading(true);
       setError(null);
       try {
-        const res = await fetch("/api/products", { cache: "no-store" });
+        const qs = new URLSearchParams({ scope: "admin", page: "1", limit: "100" });
+        if (statusFilter !== "ALL") qs.set("status", statusFilter);
+        const res = await fetch(`/api/products?${qs.toString()}`, { cache: "no-store" });
         if (!res.ok) {
           setError(`HTTP ${res.status}`);
           setProducts([]);
           return;
         }
         const raw = (await res.json()) as unknown;
-        const list = normalizeProducts(raw);
+        const list = normalizeProducts(raw && (raw as any).data ? (raw as any).data : raw);
         setProducts(list);
       } catch (err) {
         console.error("Failed to fetch products:", err);
@@ -115,26 +118,57 @@ export default function AdminProductsPage() {
       }
     };
     fetchProducts();
-  }, [normalizeProducts]);
+  }, [normalizeProducts, statusFilter]);
 
-  const handleDelete = async (id: number) => {
-    if (!confirm("Are you sure you want to delete this product?")) return;
-    const res = await fetch(`/api/products/${id}`, { method: "DELETE" });
-    if (res.ok) {
-      setProducts((prev) => prev.filter((p) => p.id !== id));
-      alert("✅ Product deleted");
-    } else {
-      let message = "Failed to delete product";
-      try {
-        const payload = (await res.json()) as unknown;
-        if (payload && typeof payload === "object" && "error" in (payload as Record<string, unknown>)) {
-          const errText = (payload as Record<string, unknown>).error;
-          if (typeof errText === "string" && errText) message = errText;
-        }
-      } catch {
-        // ignore parse error
+  // Update status (Activate/Deactivate/Undelete)
+  async function updateStatus(id: number, next: ProductStatus) {
+    try {
+      const res = await fetch(`/api/products/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: next }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(`❌ ${data?.error || "Failed to update status"}`);
+        return;
       }
-      alert(`❌ ${message}`);
+      setProducts((prev) =>
+        prev.map((p) => (p.id === id ? { ...p, status: data.status ?? next } : p))
+      );
+      alert(`✅ Status updated to ${next}`);
+      // If we are not showing this status, remove from list
+      if (statusFilter !== "ALL" && statusFilter !== next) {
+        setProducts((prev) => prev.filter((p) => p.id !== id));
+      }
+    } catch (e) {
+      console.error(e);
+      alert("❌ Network error");
+    }
+  }
+
+  // Soft delete (set DELETED)
+  const handleDelete = async (id: number) => {
+    if (!confirm("Are you sure you want to remove this product? (soft delete)")) return;
+    try {
+      const res = await fetch(`/api/products/${id}`, { method: "DELETE" });
+      const payload = await res.json();
+      if (res.ok) {
+        alert(`✅ ${payload?.message || "Product removed"}`);
+        // reflect in UI
+        if (statusFilter === "ALL" || statusFilter === "DELETED") {
+          setProducts((prev) =>
+            prev.map((p) => (p.id === id ? { ...p, status: "DELETED" } : p))
+          );
+        } else {
+          setProducts((prev) => prev.filter((p) => p.id !== id));
+        }
+      } else {
+        alert(`❌ ${payload?.error || "Failed to remove product"}`);
+      }
+    } catch (err) {
+      console.error("Delete failed", err);
+      alert("❌ Network/parse error");
     }
   };
 
@@ -167,7 +201,7 @@ export default function AdminProductsPage() {
 
       {error && (
         <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
-          {error} — check your <code>/api/products</code> response shape.
+          {error} — check your <code>/api/products?scope=admin</code> response shape.
         </div>
       )}
 
@@ -201,6 +235,17 @@ export default function AdminProductsPage() {
               </option>
             ))}
           </select>
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as any)}
+            className="border border-gray-300 px-4 py-2 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition"
+            title="Filter by status"
+          >
+            <option value="ALL">All Statuses</option>
+            <option value="ACTIVE">Active</option>
+            <option value="INACTIVE">Inactive</option>
+            <option value="DELETED">Deleted</option>
+          </select>
         </div>
 
         <div className="flex gap-2 shrink-0">
@@ -208,7 +253,7 @@ export default function AdminProductsPage() {
             href="/"
             className="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-200 transition"
           >
-            ← Back
+            ← Store
           </Link>
           <Link
             href="/admin/products/add"
@@ -234,6 +279,7 @@ export default function AdminProductsPage() {
                 <th className="px-4 py-3">Price</th>
                 <th className="px-4 py-3">Stock</th>
                 <th className="px-4 py-3">Category</th>
+                <th className="px-4 py-3">Status</th>{/* 👈 */}
                 <th className="px-4 py-3 text-center">Actions</th>
               </tr>
             </thead>
@@ -272,13 +318,45 @@ export default function AdminProductsPage() {
                     </span>
                   </td>
                   <td className="px-4 py-3 text-blue-600">{p.category ? p.category.name : "—"}</td>
-                  <td className="px-4 py-3 flex justify-center gap-2">
+                  <td className="px-4 py-3">
+                    <span
+                      className={`px-2 py-1 rounded-full text-xs font-medium ${
+                        p.status === "ACTIVE"
+                          ? "bg-green-100 text-green-700"
+                          : p.status === "INACTIVE"
+                          ? "bg-yellow-100 text-yellow-700"
+                          : "bg-red-100 text-red-700"
+                      }`}
+                    >
+                      {p.status}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 flex flex-wrap gap-2 justify-center">
                     <Link
                       href={`/admin/products/${p.id}/edit`}
                       className="bg-blue-500 text-white px-3 py-1.5 rounded-lg text-xs hover:bg-blue-600 transition"
                     >
                       Edit
                     </Link>
+
+                    {p.status !== "ACTIVE" && (
+                      <button
+                        onClick={() => updateStatus(p.id, "ACTIVE")}
+                        className="bg-emerald-500 text-white px-3 py-1.5 rounded-lg text-xs hover:bg-emerald-600 transition"
+                      >
+                        Activate
+                      </button>
+                    )}
+
+                    {p.status === "ACTIVE" && (
+                      <button
+                        onClick={() => updateStatus(p.id, "INACTIVE")}
+                        className="bg-amber-500 text-white px-3 py-1.5 rounded-lg text-xs hover:bg-amber-600 transition"
+                      >
+                        Deactivate
+                      </button>
+                    )}
+
                     <button
                       onClick={() => handleDelete(p.id)}
                       className="bg-red-500 text-white px-3 py-1.5 rounded-lg text-xs hover:bg-red-600 transition"

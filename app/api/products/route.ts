@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getUserSession } from "@/lib/auth";
-import { Prisma } from "@prisma/client";
+import { Prisma, $Enums } from "@prisma/client"; // ⬅️ $Enums added
 
 export const runtime = "nodejs";
 
+// ---------------------- GET /api/products ----------------------
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
@@ -17,9 +18,50 @@ export async function GET(req: Request) {
     const categoryIdRaw = searchParams.get("categoryId");
     const categoryId = categoryIdRaw ? Number(categoryIdRaw) : undefined;
     const search = searchParams.get("search") ?? undefined;
-    const sort = (searchParams.get("sort") ?? "new") as "new" | "price_asc" | "price_desc" | "rating";
+    const sort = (searchParams.get("sort") ?? "new") as
+      | "new"
+      | "price_asc"
+      | "price_desc"
+      | "rating";
+
+    // Admin scope & optional status filter
+    const scope = searchParams.get("scope");      // "admin" enables admin behavior
+    const statusParam = searchParams.get("status"); // ACTIVE | INACTIVE | DELETED
+
+    const parseStatus = (
+      s: string | null | undefined
+    ): $Enums.ProductStatus | undefined => {
+      switch ((s ?? "").toUpperCase()) {
+        case "ACTIVE":
+          return "ACTIVE";
+        case "INACTIVE":
+          return "INACTIVE";
+        case "DELETED":
+          return "DELETED";
+        default:
+          return undefined;
+      }
+    };
+
+    // Try to read user (ok if unauthenticated)
+    let userRole: "ADMIN" | "CUSTOMER" | undefined;
+    try {
+      const user = await getUserSession();
+      userRole = user?.role;
+    } catch {
+      userRole = undefined;
+    }
+
+    const isAdminScope = scope === "admin" && userRole === "ADMIN";
+
+    // Storefront: always ACTIVE
+    // Admin: filter by provided status; if none provided, show all (omit filter)
+    const statusForWhere: $Enums.ProductStatus | undefined = isAdminScope
+      ? parseStatus(statusParam)
+      : "ACTIVE";
 
     const where: Prisma.ProductWhereInput = {
+      ...(statusForWhere ? { status: statusForWhere } : {}), // ✅ enum, not { equals: string }
       ...(categoryId
         ? { categoryId }
         : categoryName
@@ -53,12 +95,14 @@ export async function GET(req: Request) {
         select: {
           id: true,
           name: true,
+          description: true,
           price: true,
           stock: true,
           imageUrl: true,
           averageRating: true,
           reviewCount: true,
           createdAt: true,
+          status: true, // expose status (useful for admin)
           category: { select: { id: true, name: true, type: true } },
           variants: { select: { id: true, sku: true, price: true, stock: true, attributes: true } },
         },
@@ -75,8 +119,14 @@ export async function GET(req: Request) {
           total,
           totalPages: Math.ceil(total / limit),
         },
+        scope: isAdminScope ? "admin" : "public",
+        appliedStatus: statusForWhere ?? "ALL",
       },
-      { headers: { "Cache-Control": "public, s-maxage=60, stale-while-revalidate=300" } }
+      {
+        headers: {
+          "Cache-Control": "public, s-maxage=60, stale-while-revalidate=300",
+        },
+      }
     );
   } catch (error: unknown) {
     console.error("Failed to fetch products:", error);
@@ -84,7 +134,7 @@ export async function GET(req: Request) {
   }
 }
 
-// POST create product (ADMIN only)
+// ---------------------- POST /api/products (ADMIN) ----------------------
 type VariantInput = {
   sku: string;
   price?: number | null;
@@ -100,6 +150,7 @@ type CreateProductBody = {
   imageUrl?: string | null;
   categoryId: number;
   variants?: VariantInput[];
+  // status?: "ACTIVE" | "INACTIVE" | "DELETED"  // optional if you want to allow on create
 };
 
 export async function POST(req: Request) {
@@ -117,9 +168,9 @@ export async function POST(req: Request) {
       imageUrl = null,
       categoryId,
       variants,
+      // status, // (optional) you can wire this if you want admins to set non-ACTIVE on create
     } = body;
 
-    // basic validation
     const cid = Number(categoryId);
     if (!cid || !Number.isFinite(cid)) {
       return NextResponse.json({ error: "Category is required" }, { status: 400 });
@@ -134,7 +185,6 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Invalid stock" }, { status: 400 });
     }
 
-    // ensure category exists
     const cat = await prisma.category.findUnique({ where: { id: cid } });
     if (!cat) return NextResponse.json({ error: "Category not found" }, { status: 404 });
 
@@ -146,6 +196,7 @@ export async function POST(req: Request) {
         stock: Number(stock),
         imageUrl,
         categoryId: cid,
+        // status: status ?? undefined,
         variants:
           Array.isArray(variants) && variants.length > 0
             ? {
@@ -170,6 +221,7 @@ export async function POST(req: Request) {
         averageRating: true,
         reviewCount: true,
         createdAt: true,
+        status: true,
         category: { select: { id: true, name: true, type: true } },
         variants: { select: { id: true, sku: true, price: true, stock: true, attributes: true } },
       },
