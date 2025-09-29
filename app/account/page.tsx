@@ -2,8 +2,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import Image from "next/image"; // ✅ for proper icons
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabaseClient";
+import { assets } from "@/assets/assets"; // ✅ import your icons
 
 type UserMetadata = {
   name?: string;
@@ -43,7 +45,7 @@ export default function AccountPage() {
     });
   }, []);
 
-  // hydrate stats from APIs
+  // hydrate stats
   useEffect(() => {
     if (!sbUser) return;
     Promise.all([
@@ -85,45 +87,45 @@ export default function AccountPage() {
   const menuItems = [
     {
       href: "/account/profile",
-      icon: "👤",
+      icon: assets.profile_icon,
       title: "Profile",
       desc: "Manage your personal details",
     },
     {
       href: "/account/addresses",
-      icon: "🏠",
+      icon: assets.location_icon,
       title: "Addresses",
       desc: "Saved shipping locations",
     },
     {
       href: "/account/payments",
-      icon: "💳",
+      icon: assets.bankcard_icon,
       title: "Banks & Cards",
       desc: "Manage your payment methods",
     },
     {
       href: "/account/purchases",
-      icon: "📦",
+      icon: assets.purchase_icon,
       title: "My Purchases",
       desc: "View your order history",
     },
     {
       href: "/account/settings",
-      icon: "⚙️",
+      icon: assets.setting_icon,
       title: "Settings",
       desc: "Customize preferences",
     },
     {
       href: "/admin/products",
-      icon: "🛠️",
+      icon: assets.admin_icon,
       title: "Admin",
       desc: "Manage products (admin only)",
     },
   ] as const;
 
   return (
-
-    <main className="pt-16 min-h-screen bg-gradient-to-b from-indigo-600 via-indigo-700 to-indigo-900 text-white">
+    <main className="pt-16 min-h-screen bg-gradient-to-b from-indigo-600 via-indigo-700 to-indigo-900 text-white relative">
+      {/* background blur */}
       <div className="pointer-events-none absolute inset-0 -z-10 opacity-30">
         <div className="absolute -top-24 -left-16 h-72 w-72 rounded-full bg-white/20 blur-3xl" />
         <div className="absolute top-40 right-0 h-80 w-80 rounded-full bg-blue-400/20 blur-3xl" />
@@ -145,7 +147,7 @@ export default function AccountPage() {
               )}
             </div>
 
-            {/* Identity / Stats */}
+            {/* Identity */}
             <div className="flex-1">
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                 <h1 className="text-2xl md:text-3xl font-bold">{displayName}</h1>
@@ -157,8 +159,7 @@ export default function AccountPage() {
               </div>
 
               <p className="mt-1 text-white/80 text-sm">
-                Manage your profile, orders, and account settings — all in one
-                place.
+                Manage your profile, orders, and account settings — all in one place.
               </p>
 
               <div className="mt-4 flex flex-wrap gap-2">
@@ -199,8 +200,14 @@ export default function AccountPage() {
                   <div className="rounded-2xl bg-white/80 dark:bg-white/10 backdrop-blur-md ring-1 ring-black/5 dark:ring-white/10 p-5 h-full shadow-sm transition-all duration-300 group-hover:shadow-xl group-hover:-translate-y-1">
                     <div className="flex items-start justify-between">
                       <div className="flex items-center gap-3">
-                        <span className="grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br from-indigo-500 to-blue-500 text-xl shadow-sm">
-                          {item.icon}
+                        <span className="grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br from-indigo-500 to-blue-500 shadow-sm">
+                          <Image
+                            src={item.icon}
+                            alt={item.title}
+                            width={24}
+                            height={24}
+                            className="object-contain"
+                          />
                         </span>
                         <div>
                           <div className="text-gray-900 dark:text-white font-semibold">

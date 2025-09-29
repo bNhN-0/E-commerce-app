@@ -12,6 +12,15 @@ import shopping from "./icons/icons8-shopping-bag-50.png"
 import cart from "./icons/icons8-add-shopping-cart-50.png"
 import profile from "./icons/icons8-profile-48.png"
 import product from "./icons/icons8-open-parcel-50.png"
+import profile_2 from "./icons/icons8-test-account-48.png"
+import setting from "./icons/icons8-setting-48.png"
+import purchase from "./icons/icons8-purchase-48.png"
+import location from "./icons/icons8-location-48.png"
+import admin from "./icons/icons8-admin-48.png"
+import bankcard from "./icons/icons8-bank-card-48.png"
+
+
+
 
 export const assets = {
   logo: logo_image,
@@ -28,6 +37,12 @@ export const assets = {
   cart_icon : cart,
   profile_icon : profile,
   product_icon : product,
+  profile_2_icon : profile_2,
+  setting_icon : setting,
+  purchase_icon : purchase,
+  location_icon : location,
+  admin_icon : admin,
+  bankcard_icon : bankcard,
 
 };
 
