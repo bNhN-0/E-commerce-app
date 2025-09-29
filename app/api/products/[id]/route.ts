@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getUserSession } from "@/lib/auth";
-import type { Prisma } from "@prisma/client";
+import type { Prisma, ProductStatus } from "@prisma/client";
 
 export const runtime = "nodejs";
 
@@ -17,12 +17,12 @@ async function readId(params: RouteContext["params"]): Promise<number> {
   return Number.isFinite(n) ? n : NaN;
 }
 
-// Local union (avoid importing Prisma enum type)
-type LocalStatus = "ACTIVE" | "INACTIVE" | "DELETED";
-function parseStatus(s: unknown): LocalStatus | undefined {
+function parseStatus(s: unknown): ProductStatus | undefined {
   if (typeof s !== "string") return undefined;
   const up = s.toUpperCase();
-  return up === "ACTIVE" || up === "INACTIVE" || up === "DELETED" ? (up as LocalStatus) : undefined;
+  return up === "ACTIVE" || up === "INACTIVE" || up === "DELETED"
+    ? (up as ProductStatus)
+    : undefined;
 }
 
 // -------------------- GET /api/products/:id --------------------
@@ -45,7 +45,7 @@ export async function GET(_req: Request, ctx: RouteContext): Promise<Response> {
         averageRating: true,
         reviewCount: true,
         createdAt: true,
-        status: true,
+        status: true, // include status
         categoryId: true,
         category: { select: { id: true, name: true, type: true } },
         media: { select: { id: true, url: true, type: true } },
@@ -56,15 +56,18 @@ export async function GET(_req: Request, ctx: RouteContext): Promise<Response> {
       },
     });
 
-    if (!product) return NextResponse.json({ error: "Product not found" }, { status: 404 });
+    if (!product) {
+      return NextResponse.json({ error: "Product not found" }, { status: 404 });
+    }
 
     // Hide non-ACTIVE products from non-admins
     let isAdmin = false;
     try {
       const user = await getUserSession();
       isAdmin = user?.role === "ADMIN";
-    } catch { /* noop */ }
-
+    } catch {
+      /* noop */
+    }
     if (!isAdmin && product.status !== "ACTIVE") {
       return NextResponse.json({ error: "Product not found" }, { status: 404 });
     }
@@ -104,11 +107,10 @@ export async function PATCH(req: Request, ctx: RouteContext): Promise<Response> 
       imageUrl?: string | null;
       categoryId?: number;
       variants?: VariantInput[];
-      status?: LocalStatus | string;
+      status?: ProductStatus | string; // allow status update
     }>;
 
-    // Build a plain object; cast once at the Prisma call
-    const data: Record<string, unknown> = {};
+    const data: Prisma.ProductUpdateInput = {};
     if (body.name !== undefined) data.name = body.name;
     if (body.description !== undefined) data.description = body.description;
     if (body.price !== undefined) data.price = body.price;
@@ -129,7 +131,7 @@ export async function PATCH(req: Request, ctx: RouteContext): Promise<Response> 
     if (!Array.isArray(body.variants)) {
       const updated = await prisma.product.update({
         where: { id },
-        data: data as Prisma.ProductUpdateInput, // single safe cast
+        data,
         select: {
           id: true,
           name: true,
@@ -178,7 +180,7 @@ export async function PATCH(req: Request, ctx: RouteContext): Promise<Response> 
     await prisma.$transaction(
       async (tx) => {
         if (Object.keys(data).length > 0) {
-          await tx.product.update({ where: { id }, data: data as Prisma.ProductUpdateInput });
+          await tx.product.update({ where: { id }, data });
         }
         await tx.productVariant.deleteMany({
           where: { productId: id, ...(keepIds.length ? { id: { notIn: keepIds } } : {}) },
@@ -218,7 +220,12 @@ export async function PATCH(req: Request, ctx: RouteContext): Promise<Response> 
 
     return NextResponse.json(result);
   } catch (err) {
-    if (typeof err === "object" && err && "code" in err && (err as { code?: string }).code === "P2002") {
+    if (
+      typeof err === "object" &&
+      err !== null &&
+      "code" in err &&
+      (err as { code?: string }).code === "P2002"
+    ) {
       return NextResponse.json(
         { error: "Unique constraint failed (e.g., duplicate SKU)" },
         { status: 409 }
@@ -248,7 +255,7 @@ export async function DELETE(_req: Request, ctx: RouteContext): Promise<Response
   try {
     const updated = await prisma.product.update({
       where: { id },
-      data: { status: "DELETED" } as unknown as Prisma.ProductUpdateInput, // single cast
+      data: { status: "DELETED" },
       select: { id: true, name: true, status: true },
     });
 
