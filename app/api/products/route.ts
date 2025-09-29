@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getUserSession } from "@/lib/auth";
-import { Prisma, $Enums } from "@prisma/client"; // ⬅️ $Enums added
+import type { Prisma } from "@prisma/client";
 
 export const runtime = "nodejs";
 
@@ -24,20 +24,16 @@ export async function GET(req: Request) {
       | "price_desc"
       | "rating";
 
-    // Admin scope & optional status filter
-    const scope = searchParams.get("scope");      // "admin" enables admin behavior
-    const statusParam = searchParams.get("status"); // ACTIVE | INACTIVE | DELETED
-
-    const parseStatus = (
-      s: string | null | undefined
-    ): $Enums.ProductStatus | undefined => {
+    // Admin scope & optional status filter (local union, no $Enums)
+    const scope = searchParams.get("scope");          // "admin" enables admin behavior
+    const statusParam = searchParams.get("status");   // ACTIVE | INACTIVE | DELETED
+    type LocalStatus = "ACTIVE" | "INACTIVE" | "DELETED";
+    const parseStatus = (s: string | null | undefined): LocalStatus | undefined => {
       switch ((s ?? "").toUpperCase()) {
         case "ACTIVE":
-          return "ACTIVE";
         case "INACTIVE":
-          return "INACTIVE";
         case "DELETED":
-          return "DELETED";
+          return s!.toUpperCase() as LocalStatus;
         default:
           return undefined;
       }
@@ -51,31 +47,26 @@ export async function GET(req: Request) {
     } catch {
       userRole = undefined;
     }
-
     const isAdminScope = scope === "admin" && userRole === "ADMIN";
 
     // Storefront: always ACTIVE
     // Admin: filter by provided status; if none provided, show all (omit filter)
-    const statusForWhere: $Enums.ProductStatus | undefined = isAdminScope
+    const statusForWhere: LocalStatus | undefined = isAdminScope
       ? parseStatus(statusParam)
       : "ACTIVE";
 
-    const where: Prisma.ProductWhereInput = {
-      ...(statusForWhere ? { status: statusForWhere } : {}), // ✅ enum, not { equals: string }
-      ...(categoryId
-        ? { categoryId }
-        : categoryName
-        ? { category: { name: { equals: categoryName, mode: "insensitive" } } }
-        : {}),
-      ...(search
-        ? {
-            OR: [
-              { name: { contains: search, mode: "insensitive" } },
-              { description: { contains: search, mode: "insensitive" } },
-            ],
-          }
-        : {}),
-    };
+    // Build where with a single cast to tolerate slightly stale client types
+    const whereCore: Record<string, unknown> = {};
+    if (statusForWhere) whereCore.status = statusForWhere;
+    if (categoryId) whereCore.categoryId = categoryId;
+    else if (categoryName)
+      whereCore.category = { name: { equals: categoryName, mode: "insensitive" } };
+    if (search) {
+      whereCore.OR = [
+        { name: { contains: search, mode: "insensitive" } },
+        { description: { contains: search, mode: "insensitive" } },
+      ];
+    }
 
     const orderBy: Prisma.ProductOrderByWithRelationInput[] =
       sort === "price_asc"
@@ -90,29 +81,20 @@ export async function GET(req: Request) {
       prisma.product.findMany({
         skip,
         take: limit,
-        where,
+        where: whereCore as Prisma.ProductWhereInput,
         orderBy,
-        select: {
-          id: true,
-          name: true,
-          description: true,
-          price: true,
-          stock: true,
-          imageUrl: true,
-          averageRating: true,
-          reviewCount: true,
-          createdAt: true,
-          status: true, // expose status (useful for admin)
+        // Use include (not select) so base fields incl. `status` are present without listing them
+        include: {
           category: { select: { id: true, name: true, type: true } },
           variants: { select: { id: true, sku: true, price: true, stock: true, attributes: true } },
         },
       }),
-      prisma.product.count({ where }),
+      prisma.product.count({ where: whereCore as Prisma.ProductWhereInput }),
     ]);
 
     return NextResponse.json(
       {
-        data: items,
+        data: items, // items include `status` at runtime
         pagination: {
           page,
           limit,
@@ -150,7 +132,7 @@ type CreateProductBody = {
   imageUrl?: string | null;
   categoryId: number;
   variants?: VariantInput[];
-  // status?: "ACTIVE" | "INACTIVE" | "DELETED"  // optional if you want to allow on create
+  // status?: "ACTIVE" | "INACTIVE" | "DELETED"
 };
 
 export async function POST(req: Request) {
@@ -168,7 +150,7 @@ export async function POST(req: Request) {
       imageUrl = null,
       categoryId,
       variants,
-      // status, // (optional) you can wire this if you want admins to set non-ACTIVE on create
+      // status,
     } = body;
 
     const cid = Number(categoryId);
@@ -196,7 +178,7 @@ export async function POST(req: Request) {
         stock: Number(stock),
         imageUrl,
         categoryId: cid,
-        // status: status ?? undefined,
+        // status: status as any, // enable if you want to set non-default on create
         variants:
           Array.isArray(variants) && variants.length > 0
             ? {
@@ -211,17 +193,7 @@ export async function POST(req: Request) {
         averageRating: 0,
         reviewCount: 0,
       },
-      select: {
-        id: true,
-        name: true,
-        description: true,
-        price: true,
-        stock: true,
-        imageUrl: true,
-        averageRating: true,
-        reviewCount: true,
-        createdAt: true,
-        status: true,
+      include: {
         category: { select: { id: true, name: true, type: true } },
         variants: { select: { id: true, sku: true, price: true, stock: true, attributes: true } },
       },
