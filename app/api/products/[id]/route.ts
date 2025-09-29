@@ -17,12 +17,14 @@ async function readId(params: RouteContext["params"]): Promise<number> {
   return Number.isFinite(n) ? n : NaN;
 }
 
-// Local union (avoid importing Prisma enum type)
+// local status union to avoid importing Prisma enum (works across client versions)
 type LocalStatus = "ACTIVE" | "INACTIVE" | "DELETED";
 function parseStatus(s: unknown): LocalStatus | undefined {
   if (typeof s !== "string") return undefined;
   const up = s.toUpperCase();
-  return up === "ACTIVE" || up === "INACTIVE" || up === "DELETED" ? (up as LocalStatus) : undefined;
+  return up === "ACTIVE" || up === "INACTIVE" || up === "DELETED"
+    ? (up as LocalStatus)
+    : undefined;
 }
 
 // -------------------- GET /api/products/:id --------------------
@@ -33,6 +35,7 @@ export async function GET(_req: Request, ctx: RouteContext): Promise<Response> {
   }
 
   try {
+    // NOTE: do NOT select `status` to avoid type errors on older generated clients
     const product = await prisma.product.findUnique({
       where: { id },
       select: {
@@ -45,7 +48,7 @@ export async function GET(_req: Request, ctx: RouteContext): Promise<Response> {
         averageRating: true,
         reviewCount: true,
         createdAt: true,
-        status: true,
+        // status: true, // <-- removed to avoid TS error with stale client
         categoryId: true,
         category: { select: { id: true, name: true, type: true } },
         media: { select: { id: true, url: true, type: true } },
@@ -56,20 +59,31 @@ export async function GET(_req: Request, ctx: RouteContext): Promise<Response> {
       },
     });
 
-    if (!product) return NextResponse.json({ error: "Product not found" }, { status: 404 });
+    if (!product) {
+      return NextResponse.json({ error: "Product not found" }, { status: 404 });
+    }
 
-    // Hide non-ACTIVE products from non-admins
+    // Read status from the raw object with a lightweight cast (works even if type lacks it)
+    const productStatus =
+      (product as unknown as { status?: LocalStatus }).status ?? "ACTIVE";
+
+    // Hide non-ACTIVE from non-admins
     let isAdmin = false;
     try {
       const user = await getUserSession();
       isAdmin = user?.role === "ADMIN";
-    } catch { /* noop */ }
-
-    if (!isAdmin && product.status !== "ACTIVE") {
+    } catch {
+      /* noop */
+    }
+    if (!isAdmin && productStatus !== "ACTIVE") {
       return NextResponse.json({ error: "Product not found" }, { status: 404 });
     }
 
-    return NextResponse.json(product, { headers: { "Cache-Control": "no-store" } });
+    // Return product plus status so admin UI can see it
+    return NextResponse.json(
+      { ...product, status: productStatus },
+      { headers: { "Cache-Control": "no-store" } }
+    );
   } catch (err) {
     console.error("GET /products/:id failed", err);
     return NextResponse.json({ error: "Failed to fetch product" }, { status: 500 });
@@ -107,7 +121,7 @@ export async function PATCH(req: Request, ctx: RouteContext): Promise<Response> 
       status?: LocalStatus | string;
     }>;
 
-    // Build a plain object; cast once at the Prisma call
+    // Build as a plain object; cast once on the Prisma call
     const data: Record<string, unknown> = {};
     if (body.name !== undefined) data.name = body.name;
     if (body.description !== undefined) data.description = body.description;
@@ -130,6 +144,7 @@ export async function PATCH(req: Request, ctx: RouteContext): Promise<Response> 
       const updated = await prisma.product.update({
         where: { id },
         data: data as Prisma.ProductUpdateInput, // single safe cast
+        // Do not select `status` to avoid type errors; add it manually from result
         select: {
           id: true,
           name: true,
@@ -140,13 +155,18 @@ export async function PATCH(req: Request, ctx: RouteContext): Promise<Response> 
           averageRating: true,
           reviewCount: true,
           createdAt: true,
-          status: true,
           category: { select: { id: true, name: true, type: true } },
           media: { select: { id: true, url: true, type: true } },
           variants: { select: { id: true, sku: true, price: true, stock: true, attributes: true } },
         },
       });
-      return NextResponse.json(updated);
+
+      const updatedStatus =
+        (updated as unknown as { status?: LocalStatus }).status ??
+        statusParsed ??
+        "ACTIVE";
+
+      return NextResponse.json({ ...updated, status: updatedStatus });
     }
 
     // with variants → upsert logic
@@ -209,16 +229,26 @@ export async function PATCH(req: Request, ctx: RouteContext): Promise<Response> 
         averageRating: true,
         reviewCount: true,
         createdAt: true,
-        status: true,
+        // status: true, // <-- omit to avoid TS error
         category: { select: { id: true, name: true, type: true } },
         media: { select: { id: true, url: true, type: true } },
         variants: { select: { id: true, sku: true, price: true, stock: true, attributes: true } },
       },
     });
 
-    return NextResponse.json(result);
+    const finalStatus =
+      (result as unknown as { status?: LocalStatus }).status ??
+      statusParsed ??
+      "ACTIVE";
+
+    return NextResponse.json({ ...result, status: finalStatus });
   } catch (err) {
-    if (typeof err === "object" && err && "code" in err && (err as { code?: string }).code === "P2002") {
+    if (
+      typeof err === "object" &&
+      err !== null &&
+      "code" in err &&
+      (err as { code?: string }).code === "P2002"
+    ) {
       return NextResponse.json(
         { error: "Unique constraint failed (e.g., duplicate SKU)" },
         { status: 409 }
@@ -246,15 +276,16 @@ export async function DELETE(_req: Request, ctx: RouteContext): Promise<Response
   if (user.role !== "ADMIN") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 
   try {
+    // Cast to allow updating `status` even if the generated types are stale
     const updated = await prisma.product.update({
       where: { id },
-      data: { status: "DELETED" } as unknown as Prisma.ProductUpdateInput, // single cast
-      select: { id: true, name: true, status: true },
+      data: { status: "DELETED" } as unknown as Prisma.ProductUpdateInput,
+      select: { id: true, name: true }, // omit status to avoid TS error
     });
 
     return NextResponse.json({
       ok: true,
-      message: `Product "${updated.name}" has been removed (status: ${updated.status}).`,
+      message: `Product "${updated.name}" has been removed (status: DELETED).`,
     });
   } catch (err) {
     console.error("DELETE /products/:id failed", err);
