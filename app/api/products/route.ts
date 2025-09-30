@@ -45,11 +45,9 @@ export async function GET(req: Request) {
     }
 
     // Parse status for admin scope; storefront always ACTIVE
-    const parseStatus = (s: string | null | undefined):
-      | "ACTIVE"
-      | "INACTIVE"
-      | "DELETED"
-      | undefined => {
+    const parseStatus = (
+      s: string | null | undefined
+    ): "ACTIVE" | "INACTIVE" | "DELETED" | undefined => {
       switch ((s ?? "").toUpperCase()) {
         case "ACTIVE":
         case "INACTIVE":
@@ -62,8 +60,9 @@ export async function GET(req: Request) {
 
     const statusForWhere = isAdminScope ? parseStatus(statusParam) : "ACTIVE";
 
-    // Shared filters (used for non-best, and again when fetching best)
-    const baseWhere: Prisma.ProductWhereInput = {
+    // Build shared filters (avoid annotating as Prisma.ProductWhereInput to
+    // prevent excess-property checks if your client types are stale)
+    const baseWhere = {
       ...(statusForWhere ? { status: statusForWhere } : {}), // admin without status => no status filter
       ...(categoryId
         ? { categoryId }
@@ -85,7 +84,6 @@ export async function GET(req: Request) {
       const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
 
       // Aggregate order items by productId for paid/fulfilled orders in window
-      // (We pull a bit more than 'limit' to have room after stock/status filtering)
       const agg = await prisma.orderItem.groupBy({
         by: ["productId"],
         where: {
@@ -106,11 +104,11 @@ export async function GET(req: Request) {
           prisma.product.findMany({
             skip,
             take: limit,
-            where: baseWhere,
+            where: baseWhere as Prisma.ProductWhereInput,
             orderBy: [{ createdAt: "desc" }],
             select: productSelect,
           }),
-          prisma.product.count({ where: baseWhere }),
+          prisma.product.count({ where: baseWhere as Prisma.ProductWhereInput }),
         ]);
 
         return NextResponse.json(
@@ -132,18 +130,18 @@ export async function GET(req: Request) {
       // Map productId -> sold units in window
       const soldMap = new Map<number, number>();
       for (const row of agg) {
-        soldMap.set(row.productId, (row._sum.quantity ?? 0));
+        soldMap.set(row.productId, row._sum.quantity ?? 0);
       }
 
       // Fetch products for those IDs, apply storefront visibility (ACTIVE, in-stock) unless admin
-      const productWhere: Prisma.ProductWhereInput = {
+      const productWhere = {
         ...baseWhere,
         id: { in: productIds },
         ...(isAdminScope ? {} : { stock: { gt: 0 }, status: "ACTIVE" }),
       };
 
       const products = await prisma.product.findMany({
-        where: productWhere,
+        where: productWhere as Prisma.ProductWhereInput,
         select: productSelect,
       });
 
@@ -201,11 +199,11 @@ export async function GET(req: Request) {
       prisma.product.findMany({
         skip,
         take: limit,
-        where: baseWhere,
+        where: baseWhere as Prisma.ProductWhereInput,
         orderBy,
         select: productSelect,
       }),
-      prisma.product.count({ where: baseWhere }),
+      prisma.product.count({ where: baseWhere as Prisma.ProductWhereInput }),
     ]);
 
     return NextResponse.json(
@@ -228,7 +226,8 @@ export async function GET(req: Request) {
   }
 }
 
-
+// Keep this as a plain const (no `satisfies Prisma.ProductSelect`) so it
+// works even if your generated client is a step behind the schema.
 const productSelect = {
   id: true,
   name: true,
@@ -239,10 +238,10 @@ const productSelect = {
   averageRating: true,
   reviewCount: true,
   createdAt: true,
-  status: true,
+  status: true, // NEW field; safe to keep here
   category: { select: { id: true, name: true, type: true } },
   variants: { select: { id: true, sku: true, price: true, stock: true, attributes: true } },
-} satisfies Prisma.ProductSelect;
+} as const;
 
 // Cache headers helper
 function cacheHdr(sMaxAge = 60, swr = 300) {
