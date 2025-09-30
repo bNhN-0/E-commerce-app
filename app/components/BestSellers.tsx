@@ -26,12 +26,11 @@ type Product = {
 };
 
 type Props = {
-  days?: number;           // lookback window
-  limit?: number;          // how many to show
-  categoryId?: number;     //  limit to a category
-  category?: string;       //  by category name
+  days?: number;
+  limit?: number;
+  categoryId?: number;
+  category?: string;
   title?: string;
-  className?: string;
 };
 
 export default function BestSellers({
@@ -40,12 +39,10 @@ export default function BestSellers({
   categoryId,
   category,
   title = "Best Sellers",
-  className = "",
 }: Props) {
   const [items, setItems] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // bucket sold count for nicer UI: 1–9, 10+, 50+, 100+, 500+
   const formatSold = (n?: number) => {
     if (!n || n <= 0) return undefined;
     if (n < 10) return `${n} sold recently`;
@@ -67,7 +64,9 @@ export default function BestSellers({
     setLoading(true);
     fetch(`/api/products?${qs.toString()}`, { cache: "no-store" })
       .then((r) => r.json())
-      .then((json: { data?: Product[] }) => setItems(Array.isArray(json?.data) ? json.data : []))
+      .then((json: { data?: Product[] }) =>
+        setItems(Array.isArray(json?.data) ? json.data : [])
+      )
       .catch(() => setItems([]))
       .finally(() => setLoading(false));
   }, [days, limit, categoryId, category]);
@@ -76,11 +75,14 @@ export default function BestSellers({
 
   if (loading) {
     return (
-      <section className={className}>
+      <section className="container mx-auto px-4 py-6">
         <h2 className="text-xl font-semibold mb-4">🔥 {title}</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
           {Array.from({ length: limit }).map((_, i) => (
-            <div key={i} className="h-64 rounded-2xl bg-gray-100 animate-pulse" />
+            <div
+              key={i}
+              className="w-full aspect-[1/1] rounded-md bg-gray-200 animate-pulse"
+            />
           ))}
         </div>
       </section>
@@ -90,63 +92,56 @@ export default function BestSellers({
   if (cards.length === 0) return null;
 
   return (
-    <section className={className}>
+    <section className="container mx-auto px-4 py-6 lg:ml-30">
       <h2 className="text-xl font-semibold mb-4">🔥 {title}</h2>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
         {cards.map((p) => (
           <div
             key={p.id}
-            className="group border rounded-2xl shadow hover:shadow-xl transition overflow-hidden bg-white flex flex-col"
+            className="group relative w-full bg-white rounded-md border border-gray-100 shadow-sm hover:shadow-md transition-all duration-300 overflow-hidden"
           >
-            <Link href={`/products/${p.id}`} className="block relative w-full h-48">
-              <span className="absolute left-3 top-3 z-10 text-[11px] font-semibold bg-amber-500 text-white px-2 py-1 rounded">
-                Best Seller
-              </span>
-
+            {/* Image */}
+            <Link href={`/products/${p.id}`} className="block relative">
               {p.imageUrl ? (
                 <Image
                   src={p.imageUrl}
                   alt={p.name}
-                  fill
-                  sizes="(max-width: 768px) 100vw, (max-width: 1024px) 33vw, 33vw"
-                  className="object-cover transition-transform duration-300 group-hover:scale-105"
+                  width={300}
+                  height={300}
+                  className="w-full aspect-[1/1] object-cover rounded-t-md group-hover:scale-105 transition-transform duration-300"
+                  sizes="(max-width: 640px) 45vw, (max-width: 1280px) 25vw, 20vw"
                   unoptimized
                 />
               ) : (
-                <div className="w-full h-full bg-gray-100 flex items-center justify-center text-gray-400">
+                <div className="w-full aspect-[1/1] bg-gray-100 flex items-center justify-center text-gray-400 text-xs">
                   No Image
                 </div>
               )}
             </Link>
 
-            <div className="p-4 flex-1 flex flex-col">
-              <h3 className="font-semibold text-lg truncate">{p.name}</h3>
-
-              {p.description ? (
-                <p className="text-gray-600 text-sm line-clamp-2 mb-2">{p.description}</p>
-              ) : null}
-
-              <div className="flex items-center justify-between mb-2">
-                <span className="font-bold text-blue-600">${p.price.toFixed(2)}</span>
-                {formatSold(p.soldLastNDays) && (
-                  <span className="text-xs text-gray-500">{formatSold(p.soldLastNDays)}</span>
-                )}
-              </div>
+            {/* Content */}
+            <div className="p-2 flex flex-col">
+              <h3 className="font-medium text-xs sm:text-sm text-gray-800 truncate group-hover:text-indigo-600 transition mb-1">
+                {p.name}
+              </h3>
+              <p className="text-sm font-bold text-gray-900 mb-1">
+                ${p.price.toFixed(2)}
+              </p>
 
               {p.stock > 0 ? (
-                <p className="text-xs text-emerald-600 mb-3">In stock</p>
+                <p className="text-[11px] text-emerald-600 mb-2">In stock</p>
               ) : (
-                <p className="text-xs text-gray-500 mb-3">Out of stock</p>
+                <p className="text-[11px] text-gray-500 mb-2">Out of stock</p>
               )}
-            </div>
 
-            <Link
-              href={`/products/${p.id}`}
-              className="block w-full bg-indigo-600 hover:bg-indigo-700 text-white text-center py-3 rounded-b-2xl transition font-medium"
-            >
-              🛍 Shop it
-            </Link>
+              <Link
+                href={`/products/${p.id}`}
+                className="w-full text-center rounded bg-indigo-400 text-white font-medium text-xs py-1.5 hover:opacity-90 transition"
+              >
+                🛍 Shop
+              </Link>
+            </div>
           </div>
         ))}
       </div>
