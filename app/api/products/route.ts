@@ -316,7 +316,6 @@ export async function POST(req: Request) {
   }
 }
 
-// Cache headers helper
 function cacheHdr(sMaxAge = 60, swr = 300) {
   return {
     headers: {
