@@ -6,7 +6,6 @@ import HeroSection from "../components/HeroSection";
 import BestSellers from "../components/BestSellers";
 import PromoBanner from "../components/PromoBanner";
 import Testimonials from "../components/Testimonials";
-import NewsletterCTA from "../components/NewslettCTA";
 
 export default function HomePage() {
   return (
@@ -19,14 +18,10 @@ export default function HomePage() {
 
       <PromoBanner />
 
-      <BestSellers days={30} limit={3} className="mt-10" />
+      <BestSellers days={30} limit={4} />
 
       <section className="py-12">
         <Testimonials />
-      </section>
-
-      <section className="py-16 text-white bg-indigo-400">
-        <NewsletterCTA />
       </section>
       <Footer />
     </main>

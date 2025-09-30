@@ -92,7 +92,7 @@ export default function BestSellers({
   if (cards.length === 0) return null;
 
   return (
-    <section className="container mx-auto px-4 py-6 lg:ml-30">
+    <section className="container mx-auto px-4 py-6 ">
       <h2 className="text-xl font-semibold mb-4">🔥 {title}</h2>
 
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
