@@ -64,7 +64,7 @@ const formatAttributes = (attrs: VariantAttributes): string => {
   if (Array.isArray(attrs)) {
     return attrs.map((a) => `${a.name}: ${a.value}`).join(", ");
   }
-  return (Object.entries(attrs as Record<string, unknown>) as [string, unknown][])
+  return Object.entries(attrs as Record<string, unknown>)
     .map(([k, v]) => `${k}: ${String(v)}`)
     .join(", ");
 };
@@ -130,7 +130,7 @@ export default function ProductsPageInner() {
   if (loading)
     return (
       <div className="flex justify-center items-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-600 border-t-transparent" />
+        <div className="animate-spin rounded-full h-10 w-10 border-4 border-indigo-600 border-t-transparent" />
       </div>
     );
 
@@ -140,16 +140,16 @@ export default function ProductsPageInner() {
         <p className="text-red-600 mb-4">{error}</p>
         <button
           onClick={() => fetchProducts(pagination?.page || 1)}
-          className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg shadow transition"
+          className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2 rounded-lg shadow transition"
         >
-          🔄 Retry
+          Retry
         </button>
       </div>
     );
 
   return (
     <div className="p-6">
-      <h1 className="text-3xl font-bold mb-6 text-center">
+      <h1 className="text-2xl md:text-3xl font-bold mb-6 text-center">
         {category
           ? `Products in ${category}`
           : categoryId
@@ -165,79 +165,84 @@ export default function ProductsPageInner() {
           {search ? `for "${search}"` : ""}.
         </p>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
-          {products.map((p: Product) => (
+        // 4 per row on large screens, smaller cards
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+          {products.map((p) => (
             <div
               key={p.id}
-              className="group border rounded-2xl shadow hover:shadow-xl transition overflow-hidden bg-white flex flex-col"
+              className="group h-full rounded-xl border border-gray-200 bg-white shadow-sm hover:shadow-md transition flex flex-col overflow-hidden"
             >
               <Link href={`/products/${p.id}`} className="block">
-                <div className="relative w-full h-48">
+                {/* smaller image */}
+                <div className="relative w-full h-40">
                   {p.imageUrl ? (
                     <Image
                       src={p.imageUrl}
                       alt={p.name}
                       fill
-                      sizes="(max-width: 768px) 100vw, (max-width: 1024px) 33vw, 33vw"
-                      className="object-cover transition-transform duration-300 group-hover:scale-105"
-                      priority={false}
+                      sizes="(max-width: 1024px) 50vw, 25vw"
+                      className="object-cover"
                       unoptimized
                     />
                   ) : (
-                    <div className="w-full h-full bg-gray-100 flex items-center justify-center text-gray-400">
+                    <div className="w-full h-full bg-gray-100 grid place-items-center text-gray-400 text-xs">
                       No Image
                     </div>
                   )}
                 </div>
               </Link>
 
-              <div className="p-4 flex-1 flex flex-col">
-                <h2 className="font-semibold text-lg truncate">{p.name}</h2>
+              <div className="p-3 flex-1 flex flex-col">
+                <h2 className="font-semibold text-sm text-gray-900 mb-1 line-clamp-1">
+                  {p.name}
+                </h2>
+
                 {p.description ? (
-                  <p className="text-gray-600 text-sm line-clamp-2 mb-2">
+                  <p className="text-[12px] text-gray-600 mb-2 line-clamp-2">
                     {p.description}
                   </p>
                 ) : null}
 
-                <span className="font-bold text-blue-600 mb-1 block">
+                <span className="text-indigo-600 font-bold text-sm mb-2">
                   ${p.price.toFixed(2)}
                 </span>
 
+                {/* FULL variant list, fits by using tiny chips that wrap */}
                 {p.variants?.length > 0 && (
                   <div className="mb-3">
-                    <p className="text-xs text-gray-500 mb-1">Variants:</p>
-                    <div className="flex flex-wrap gap-2">
-                      {p.variants.map((v: Variant) => {
-                        const label = formatAttributes(v.attributes);
+                    <p className="text-[11px] text-gray-500 mb-1">Variants</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {p.variants.map((v) => {
+                        const label = formatAttributes(v.attributes) || v.sku;
                         return (
-                          <div
+                          <span
                             key={v.id}
-                            className="border px-2 py-1 rounded text-xs bg-gray-50"
                             title={label}
+                            className="inline-flex items-center gap-1 rounded-md border border-gray-200 bg-gray-50 px-2 py-1 text-[11px] leading-tight text-gray-700 whitespace-normal break-words"
                           >
                             {label}
-                            {v.price != null ? ` - $${v.price}` : ""}
-                          </div>
+                            {v.price != null ? <em className="not-italic text-gray-500">– ${v.price}</em> : null}
+                          </span>
                         );
                       })}
                     </div>
                   </div>
                 )}
 
-                {p.stock > 0 ? (
-                  <p className="text-sm text-red-500 mb-3">
-                    Only {p.stock} left in stock!
-                  </p>
-                ) : (
-                  <p className="text-sm text-gray-500 mb-3">Out of stock</p>
-                )}
+                <p
+                  className={`mt-auto text-[12px] ${
+                    p.stock > 0 ? "text-emerald-600" : "text-rose-600"
+                  }`}
+                >
+                  {p.stock > 0 ? `In stock: ${p.stock}` : "Out of stock"}
+                </p>
               </div>
 
               <Link
                 href={`/products/${p.id}`}
-                className="block w-full bg-orange-500 hover:bg-orange-600 text-white text-center py-3 rounded-b-2xl transition font-medium"
+                className="block w-full bg-indigo-600 hover:bg-indigo-700 text-white text-center py-2 text-sm font-medium transition"
               >
-                🛍 Shop it
+                 🛍 Shop It ! 
               </Link>
             </div>
           ))}

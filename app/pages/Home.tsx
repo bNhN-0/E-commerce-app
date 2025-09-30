@@ -21,11 +21,11 @@ export default function HomePage() {
 
       <BestSellers days={30} limit={3} className="mt-10" />
 
-      <section className="py-12 bg-white">
+      <section className="py-12">
         <Testimonials />
       </section>
 
-      <section className="py-16 bg-indigo-600 text-white">
+      <section className="py-16 text-white bg-indigo-400">
         <NewsletterCTA />
       </section>
       <Footer />

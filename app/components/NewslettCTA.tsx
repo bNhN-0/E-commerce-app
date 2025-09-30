@@ -13,7 +13,7 @@ export default function NewsletterCTA() {
         />
         <button
           type="submit"
-          className="bg-white text-indigo-600 px-6 py-3 rounded-lg font-semibold hover:bg-gray-100 transition"
+          className=" text-indigo-600 px-6 py-3 rounded-lg font-semibold hover:bg-gray-100 transition"
         >
           Subscribe
         </button>
