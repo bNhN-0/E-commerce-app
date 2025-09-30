@@ -42,83 +42,91 @@ export default function FeaturesLayout() {
   }, []);
 
   const SkeletonCard = () => (
-    <div className="w-full max-w-xs rounded-2xl border border-gray-100 bg-white overflow-hidden">
-      <div className="aspect-[4/3] bg-gray-200 animate-pulse" />
-      <div className="p-4 space-y-3">
-        <div className="h-4 bg-gray-200 rounded w-3/4 animate-pulse" />
-        <div className="h-5 bg-gray-200 rounded w-1/3 animate-pulse" />
-        <div className="h-9 bg-gray-200 rounded-xl animate-pulse" />
+    <div className="w-full rounded-md border border-gray-100 bg-white overflow-hidden shadow-sm">
+      <div className="aspect-[3/4] bg-gray-200 animate-pulse" />
+      <div className="p-2 space-y-2">
+        <div className="h-3 bg-gray-200 rounded w-3/4 animate-pulse" />
+        <div className="h-4 bg-gray-200 rounded w-1/3 animate-pulse" />
       </div>
     </div>
   );
 
   return (
-    <section className="container mx-auto px-4 py-10">
-      <div className="max-w-7xl mx-auto ml-20 grid grid-cols-1 lg:grid-cols-4 gap-10 items-start">
-        <div className="lg:col-span-3">
-          <h2 className="text-3xl font-extrabold mb-8 text-center text-gray-900 tracking-tight">
-            Featured Products
-          </h2>
-
-          {loading ? (
-            <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-6">
-              {Array.from({ length: 8 }).map((_, i) => (
-                <SkeletonCard key={i} />
-              ))}
-            </div>
-          ) : products.length === 0 ? (
-            <p className="text-center text-gray-500">No products available.</p>
-          ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-6">
-              {products.slice(0, 8).map((p) => (
-                <div
-                  key={p.id}
-                  className="group relative w-full max-w-xs bg-white rounded-2xl border border-gray-100 shadow-sm hover:shadow-xl transition-all duration-300 overflow-hidden"
-                >
-                  {/* Image */}
-                  <Link href={`/products/${p.id}`} className="block relative">
-                    {p.imageUrl ? (
-                      <Image
-                        src={p.imageUrl}
-                        alt={p.name}
-                        width={800}
-                        height={600}
-                        className="w-full aspect-[4/3] object-cover rounded-t-2xl group-hover:scale-105 transition-transform duration-300"
-                        sizes="(max-width: 768px) 50vw, 25vw"
-                        unoptimized
-                      />
-                    ) : (
-                      <div className="w-full aspect-[4/3] bg-gray-100 flex items-center justify-center text-gray-400 text-sm">
-                        No Image
-                      </div>
-                    )}
-                    <div className="absolute inset-0 bg-black/5 opacity-0 group-hover:opacity-100 transition" />
-                  </Link>
-
-                  {/* Content */}
-                  <div className="p-4 flex flex-col">
-                    <h3 className="font-semibold text-base text-gray-800 truncate group-hover:text-indigo-600 transition mb-1">
-                      {p.name}
-                    </h3>
-                    <p className="text-lg font-bold text-gray-900 mb-4">
-                      {money.format(Number(p.price || 0))}
-                    </p>
-
-                    <Link
-                      href={`/products/${p.id}`}
-                      className="w-full text-center rounded-xl bg-orange-400 text-white font-semibold text-sm py-2.5 hover:opacity-90 transition shadow-md"
-                    >
-                       🛍 Shop It !
-                    </Link>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+    <section className="container mx-auto px-4 py-6 lg:ml-15">
+      <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-4 gap-6 items-start justify-center ">
+        {/* --- Mobile Top Categories --- */}
+        <div className="lg:hidden mb-4">
+          <FeaturesCard />
         </div>
 
-        {/* Categories Sidebar */}
-        <div className="flex justify-center">
+        {/* --- Products Section --- */}
+        <div className="order-2 lg:order-1 lg:col-span-3 flex justify-center">
+          <div className="w-full max-w-5xl">
+            <h2 className="text-2xl sm:text-3xl font-extrabold mb-6 text-gray-900 tracking-tight">
+              Featured Products
+            </h2>
+
+            {loading ? (
+              <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
+                {Array.from({ length: 8 }).map((_, i) => (
+                  <SkeletonCard key={i} />
+                ))}
+              </div>
+            ) : products.length === 0 ? (
+              <p className="text-center text-gray-500">
+                No products available.
+              </p>
+            ) : (
+              <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
+                {products.slice(0, 8).map((p) => (
+                  <div
+                    key={p.id}
+                    className="group relative w-full bg-white rounded-md border border-gray-100 shadow-sm hover:shadow-md transition-all duration-300 overflow-hidden"
+                  >
+                    {/* Image */}
+                    <Link href={`/products/${p.id}`} className="block relative">
+                      {p.imageUrl ? (
+                        <Image
+                          src={p.imageUrl}
+                          alt={p.name}
+                          width={300}
+                          height={300}
+                          className="w-full aspect-[1/1] object-cover rounded-t-md group-hover:scale-105 transition-transform duration-300"
+                          sizes="(max-width: 640px) 45vw, (max-width: 1280px) 25vw, 20vw"
+                          unoptimized
+                        />
+                      ) : (
+                        <div className="w-full aspect-[1/1] bg-gray-100 flex items-center justify-center text-gray-400 text-xs">
+                          No Image
+                        </div>
+                      )}
+                    </Link>
+
+                    {/* Content */}
+                    <div className="p-2 flex flex-col">
+                      <h3 className="font-medium text-xs sm:text-sm text-gray-800 truncate group-hover:text-indigo-600 transition mb-1">
+                        {p.name}
+                      </h3>
+                      <p className="text-sm font-bold text-gray-900 mb-1">
+                        {money.format(Number(p.price || 0))}
+                      </p>
+
+                      <Link
+                        href={`/products/${p.id}`}
+                        className="w-full text-center rounded bg-orange-400 text-white font-medium text-xs py-1.5 hover:opacity-90 transition"
+                      >
+                        🛍 Shop
+                      </Link>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* --- Desktop Sidebar Categories --- */}
+        <div className="hidden lg:block order-1 lg:order-2 w-44">
           <FeaturesCard />
         </div>
       </div>
