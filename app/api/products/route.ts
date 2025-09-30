@@ -147,7 +147,6 @@ export async function GET(req: Request) {
         include: productInclude,
       });
 
-      // Rank by sold units desc, then by revenue desc, then by recency
       const byId = new Map(products.map((p) => [p.id, p]));
       const ranked = agg
         .filter((a) => byId.has(a.productId))
