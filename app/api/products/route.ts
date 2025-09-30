@@ -6,10 +6,16 @@ import type { Prisma } from "@prisma/client";
 export const runtime = "nodejs";
 
 // ---------------------- GET /api/products ----------------------
+// Supports:
+//   sort = new | price_asc | price_desc | rating | best
+//   days = integer (for best)  default 30
+//   limit/page = pagination (best ignores page; uses limit)
+//   scope=admin & status=ACTIVE|INACTIVE|DELETED (admin only)
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
 
+    // Common params
     const page = Math.max(parseInt(searchParams.get("page") ?? "1", 10) || 1, 1);
     const limit = Math.min(parseInt(searchParams.get("limit") ?? "20", 10) || 20, 50);
     const skip = (page - 1) * limit;
@@ -17,57 +23,171 @@ export async function GET(req: Request) {
     const categoryName = searchParams.get("category") ?? undefined;
     const categoryIdRaw = searchParams.get("categoryId");
     const categoryId = categoryIdRaw ? Number(categoryIdRaw) : undefined;
-    const search = searchParams.get("search") ?? undefined;
+    const q = searchParams.get("search") ?? undefined;
     const sort = (searchParams.get("sort") ?? "new") as
       | "new"
       | "price_asc"
       | "price_desc"
-      | "rating";
+      | "rating"
+      | "best";
 
-    // Admin scope & optional status filter (local union, no $Enums)
-    const scope = searchParams.get("scope");          // "admin" enables admin behavior
-    const statusParam = searchParams.get("status");   // ACTIVE | INACTIVE | DELETED
-    type LocalStatus = "ACTIVE" | "INACTIVE" | "DELETED";
-    const parseStatus = (s: string | null | undefined): LocalStatus | undefined => {
+    const scope = searchParams.get("scope");             // "admin" enables admin behavior
+    const statusParam = searchParams.get("status");      // ACTIVE | INACTIVE | DELETED (admin)
+    const days = Math.max(parseInt(searchParams.get("days") ?? "30", 10) || 30, 1);
+
+    // Try to read user (ok if unauthenticated)
+    let isAdminScope = false;
+    try {
+      const user = await getUserSession();
+      isAdminScope = scope === "admin" && user?.role === "ADMIN";
+    } catch {
+      isAdminScope = false;
+    }
+
+    // Parse status for admin scope; storefront always ACTIVE
+    const parseStatus = (s: string | null | undefined):
+      | "ACTIVE"
+      | "INACTIVE"
+      | "DELETED"
+      | undefined => {
       switch ((s ?? "").toUpperCase()) {
         case "ACTIVE":
         case "INACTIVE":
         case "DELETED":
-          return s!.toUpperCase() as LocalStatus;
+          return s!.toUpperCase() as "ACTIVE" | "INACTIVE" | "DELETED";
         default:
           return undefined;
       }
     };
 
-    // Try to read user (ok if unauthenticated)
-    let userRole: "ADMIN" | "CUSTOMER" | undefined;
-    try {
-      const user = await getUserSession();
-      userRole = user?.role;
-    } catch {
-      userRole = undefined;
+    const statusForWhere = isAdminScope ? parseStatus(statusParam) : "ACTIVE";
+
+    // Shared filters (used for non-best, and again when fetching best)
+    const baseWhere: Prisma.ProductWhereInput = {
+      ...(statusForWhere ? { status: statusForWhere } : {}), // admin without status => no status filter
+      ...(categoryId
+        ? { categoryId }
+        : categoryName
+        ? { category: { name: { equals: categoryName, mode: "insensitive" } } }
+        : {}),
+      ...(q
+        ? {
+            OR: [
+              { name: { contains: q, mode: "insensitive" } },
+              { description: { contains: q, mode: "insensitive" } },
+            ],
+          }
+        : {}),
+    };
+
+    // --------- BEST SELLERS branch (real sales in last N days) ---------
+    if (sort === "best") {
+      const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+
+      // Aggregate order items by productId for paid/fulfilled orders in window
+      // (We pull a bit more than 'limit' to have room after stock/status filtering)
+      const agg = await prisma.orderItem.groupBy({
+        by: ["productId"],
+        where: {
+          order: {
+            status: { in: ["PAID", "SHIPPED", "DELIVERED"] },
+            createdAt: { gte: since },
+          },
+        },
+        _sum: { quantity: true, price: true },
+        orderBy: { _sum: { quantity: "desc" } },
+        take: Math.max(limit * 3, limit), // oversample
+      });
+
+      const productIds = agg.map((a) => a.productId);
+      if (productIds.length === 0) {
+        // No sales in the window → graceful fallback to "new" listing
+        const [items, total] = await Promise.all([
+          prisma.product.findMany({
+            skip,
+            take: limit,
+            where: baseWhere,
+            orderBy: [{ createdAt: "desc" }],
+            select: productSelect,
+          }),
+          prisma.product.count({ where: baseWhere }),
+        ]);
+
+        return NextResponse.json(
+          {
+            data: items,
+            pagination: {
+              page,
+              limit,
+              total,
+              totalPages: Math.ceil(total / limit),
+            },
+            scope: isAdminScope ? "admin" : "public",
+            meta: { sort: "best", days, note: "fallback:no-sales" },
+          },
+          cacheHdr()
+        );
+      }
+
+      // Map productId -> sold units in window
+      const soldMap = new Map<number, number>();
+      for (const row of agg) {
+        soldMap.set(row.productId, (row._sum.quantity ?? 0));
+      }
+
+      // Fetch products for those IDs, apply storefront visibility (ACTIVE, in-stock) unless admin
+      const productWhere: Prisma.ProductWhereInput = {
+        ...baseWhere,
+        id: { in: productIds },
+        ...(isAdminScope ? {} : { stock: { gt: 0 }, status: "ACTIVE" }),
+      };
+
+      const products = await prisma.product.findMany({
+        where: productWhere,
+        select: productSelect,
+      });
+
+      // Rank by sold units (desc), then by revenue, then by createdAt
+      const byId = new Map(products.map((p) => [p.id, p]));
+      const ranked = agg
+        .filter((a) => byId.has(a.productId))
+        .sort((a, b) => {
+          const qa = a._sum.quantity ?? 0;
+          const qb = b._sum.quantity ?? 0;
+          if (qb !== qa) return qb - qa;
+          const ra = a._sum.price ?? 0;
+          const rb = b._sum.price ?? 0;
+          if (rb !== ra) return rb - ra;
+          const pa = byId.get(a.productId)!;
+          const pb = byId.get(b.productId)!;
+          return (pb.createdAt?.valueOf() ?? 0) - (pa.createdAt?.valueOf() ?? 0);
+        })
+        .slice(0, limit)
+        .map((g) => {
+          const p = byId.get(g.productId)!;
+          return {
+            ...p,
+            soldLastNDays: soldMap.get(g.productId) ?? 0,
+          };
+        });
+
+      return NextResponse.json(
+        {
+          data: ranked,
+          pagination: {
+            page: 1,            // best is not paginated; we return top N
+            limit,
+            total: ranked.length,
+            totalPages: 1,
+          },
+          scope: isAdminScope ? "admin" : "public",
+          meta: { sort: "best", days },
+        },
+        cacheHdr(300, 900) // cache best-sellers a bit longer (5m/15m)
+      );
     }
-    const isAdminScope = scope === "admin" && userRole === "ADMIN";
 
-    // Storefront: always ACTIVE
-    // Admin: filter by provided status; if none provided, show all (omit filter)
-    const statusForWhere: LocalStatus | undefined = isAdminScope
-      ? parseStatus(statusParam)
-      : "ACTIVE";
-
-    // Build where with a single cast to tolerate slightly stale client types
-    const whereCore: Record<string, unknown> = {};
-    if (statusForWhere) whereCore.status = statusForWhere;
-    if (categoryId) whereCore.categoryId = categoryId;
-    else if (categoryName)
-      whereCore.category = { name: { equals: categoryName, mode: "insensitive" } };
-    if (search) {
-      whereCore.OR = [
-        { name: { contains: search, mode: "insensitive" } },
-        { description: { contains: search, mode: "insensitive" } },
-      ];
-    }
-
+    // --------- Regular listing branch ---------
     const orderBy: Prisma.ProductOrderByWithRelationInput[] =
       sort === "price_asc"
         ? [{ price: "asc" }]
@@ -81,20 +201,16 @@ export async function GET(req: Request) {
       prisma.product.findMany({
         skip,
         take: limit,
-        where: whereCore as Prisma.ProductWhereInput,
+        where: baseWhere,
         orderBy,
-        // Use include (not select) so base fields incl. `status` are present without listing them
-        include: {
-          category: { select: { id: true, name: true, type: true } },
-          variants: { select: { id: true, sku: true, price: true, stock: true, attributes: true } },
-        },
+        select: productSelect,
       }),
-      prisma.product.count({ where: whereCore as Prisma.ProductWhereInput }),
+      prisma.product.count({ where: baseWhere }),
     ]);
 
     return NextResponse.json(
       {
-        data: items, // items include `status` at runtime
+        data: items,
         pagination: {
           page,
           limit,
@@ -102,13 +218,9 @@ export async function GET(req: Request) {
           totalPages: Math.ceil(total / limit),
         },
         scope: isAdminScope ? "admin" : "public",
-        appliedStatus: statusForWhere ?? "ALL",
+        meta: { sort },
       },
-      {
-        headers: {
-          "Cache-Control": "public, s-maxage=60, stale-while-revalidate=300",
-        },
-      }
+      cacheHdr()
     );
   } catch (error: unknown) {
     console.error("Failed to fetch products:", error);
@@ -116,92 +228,27 @@ export async function GET(req: Request) {
   }
 }
 
-// ---------------------- POST /api/products (ADMIN) ----------------------
-type VariantInput = {
-  sku: string;
-  price?: number | null;
-  stock?: number;
-  attributes?: unknown; // stored as JSON in Prisma
-};
 
-type CreateProductBody = {
-  name: string;
-  description?: string | null;
-  price: number;
-  stock: number;
-  imageUrl?: string | null;
-  categoryId: number;
-  variants?: VariantInput[];
-  // status?: "ACTIVE" | "INACTIVE" | "DELETED"
-};
+const productSelect = {
+  id: true,
+  name: true,
+  description: true,
+  price: true,
+  stock: true,
+  imageUrl: true,
+  averageRating: true,
+  reviewCount: true,
+  createdAt: true,
+  status: true,
+  category: { select: { id: true, name: true, type: true } },
+  variants: { select: { id: true, sku: true, price: true, stock: true, attributes: true } },
+} satisfies Prisma.ProductSelect;
 
-export async function POST(req: Request) {
-  try {
-    const user = await getUserSession();
-    if (!user) return NextResponse.json({ error: "Not logged in" }, { status: 401 });
-    if (user.role !== "ADMIN") return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-
-    const body = (await req.json()) as Partial<CreateProductBody>;
-    const {
-      name,
-      description = null,
-      price,
-      stock,
-      imageUrl = null,
-      categoryId,
-      variants,
-      // status,
-    } = body;
-
-    const cid = Number(categoryId);
-    if (!cid || !Number.isFinite(cid)) {
-      return NextResponse.json({ error: "Category is required" }, { status: 400 });
-    }
-    if (!name || typeof name !== "string" || !name.trim()) {
-      return NextResponse.json({ error: "Name is required" }, { status: 400 });
-    }
-    if (!Number.isFinite(Number(price)) || Number(price) < 0) {
-      return NextResponse.json({ error: "Invalid price" }, { status: 400 });
-    }
-    if (!Number.isFinite(Number(stock)) || Number(stock) < 0) {
-      return NextResponse.json({ error: "Invalid stock" }, { status: 400 });
-    }
-
-    const cat = await prisma.category.findUnique({ where: { id: cid } });
-    if (!cat) return NextResponse.json({ error: "Category not found" }, { status: 404 });
-
-    const newProduct = await prisma.product.create({
-      data: {
-        name: name.trim(),
-        description,
-        price: Number(price),
-        stock: Number(stock),
-        imageUrl,
-        categoryId: cid,
-        // status: status as any, // enable if you want to set non-default on create
-        variants:
-          Array.isArray(variants) && variants.length > 0
-            ? {
-                create: variants.map((v: VariantInput) => ({
-                  sku: v.sku,
-                  price: v.price ?? null,
-                  stock: v.stock ?? 0,
-                  attributes: (v.attributes as Prisma.InputJsonValue) ?? {},
-                })),
-              }
-            : undefined,
-        averageRating: 0,
-        reviewCount: 0,
-      },
-      include: {
-        category: { select: { id: true, name: true, type: true } },
-        variants: { select: { id: true, sku: true, price: true, stock: true, attributes: true } },
-      },
-    });
-
-    return NextResponse.json(newProduct, { status: 201 });
-  } catch (error: unknown) {
-    console.error("Failed to create product:", error);
-    return NextResponse.json({ error: "Failed to create product" }, { status: 500 });
-  }
+// Cache headers helper
+function cacheHdr(sMaxAge = 60, swr = 300) {
+  return {
+    headers: {
+      "Cache-Control": `public, s-maxage=${sMaxAge}, stale-while-revalidate=${swr}`,
+    },
+  };
 }
